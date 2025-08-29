@@ -10,6 +10,11 @@ import io
 import requests
 from typing import Dict, Any, List, Optional, Tuple
 from functools import lru_cache
+import os
+import hashlib
+import time
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Optional models
 try:
@@ -24,7 +29,80 @@ try:
 except Exception:
     HAS_XGB = False
 
+# Simple rate limiter and retry for external calls
+import time
+from functools import wraps
+
+LAST_CALL_TS = 0.0
+MIN_INTERVAL = 0.5  # seconds
+
+def rate_limited(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        global LAST_CALL_TS
+        wait = MIN_INTERVAL - (time.time() - LAST_CALL_TS)
+        if wait > 0:
+            time.sleep(wait)
+        for attempt in range(3):
+            try:
+                result = func(*args, **kwargs)
+                LAST_CALL_TS = time.time()
+                return result
+            except Exception:
+                if attempt == 2:
+                    raise
+                time.sleep(1.0 * (attempt + 1))  # backoff
+    return wrapper
+
 app = FastAPI(title="SDGs AI Dashboard")
+
+# Simple on-disk cache + rate-limited session for external data sources
+CACHE_DIR = os.path.join("app", "data", "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+_session = None
+_last_call_ts = 0.0
+RATE_LIMIT_SECONDS = 0.2  # ~5 req/sec
+
+def get_session():
+    global _session
+    if _session is None:
+        s = requests.Session()
+        retries = Retry(total=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
+        s.mount("https://", HTTPAdapter(max_retries=retries))
+        s.mount("http://", HTTPAdapter(max_retries=retries))
+        _session = s
+    return _session
+
+def rl_get(url: str, timeout: int = 30):
+    global _last_call_ts
+    now = time.time()
+    wait = _last_call_ts + RATE_LIMIT_SECONDS - now
+    if wait > 0:
+        time.sleep(wait)
+    resp = get_session().get(url, timeout=timeout)
+    _last_call_ts = time.time()
+    return resp
+
+def _cache_path(key: str) -> str:
+    h = hashlib.sha1(key.encode("utf-8")).hexdigest()
+    return os.path.join(CACHE_DIR, f"{h}.parquet")
+
+def cache_df(key: str, df: pd.DataFrame):
+    try:
+        path = _cache_path(key)
+        df.to_parquet(path)
+    except Exception:
+        pass
+
+def load_cache_df(key: str) -> Optional[pd.DataFrame]:
+    try:
+        path = _cache_path(key)
+        if os.path.exists(path):
+            return pd.read_parquet(path)
+    except Exception:
+        return None
+    return None
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
@@ -255,9 +333,14 @@ def _train_and_forecast(df: pd.DataFrame, horizon: int, target_column: str = "va
 
 
 @lru_cache(maxsize=256)
+@rate_limited
 def fetch_world_bank_series(country: str, indicator: str, per_page: int = 20000) -> pd.DataFrame:
     url = f"https://api.worldbank.org/v2/country/{country}/indicator/{indicator}?format=json&per_page={per_page}"
-    resp = requests.get(url, timeout=30)
+    ck = f"wb::{country}::{indicator}"
+    cached = load_cache_df(ck)
+    if cached is not None and not cached.empty:
+        return cached
+    resp = rl_get(url, timeout=30)
     if resp.status_code != 200:
         raise RuntimeError(f"World Bank API request failed with status {resp.status_code}")
     data = resp.json()
@@ -278,7 +361,9 @@ def fetch_world_bank_series(country: str, indicator: str, per_page: int = 20000)
     df = pd.DataFrame(rows).dropna()
     if df.empty:
         raise RuntimeError("No valid data points returned from World Bank.")
-    return df.sort_values("year")
+    df = df.sort_values("year")
+    cache_df(ck, df)
+    return df
 
 
 def fetch_world_bank_multi(country: str, indicators: List[str]) -> pd.DataFrame:
@@ -290,6 +375,56 @@ def fetch_world_bank_multi(country: str, indicators: List[str]) -> pd.DataFrame:
         raise RuntimeError("No data merged from World Bank.")
     merged = merged.sort_values("year").dropna(how="all")
     return merged
+
+
+def fetch_owid_series(indicator: str, country_code: str) -> pd.DataFrame:
+    """Fetch a series from Our World in Data Grapher CSV (columns: Entity, Code, Year, Value)."""
+    url = f"https://ourworldindata.org/grapher/{indicator}.csv"
+    ck = f"owid::{indicator}::{country_code}"
+    cached = load_cache_df(ck)
+    if cached is not None and not cached.empty:
+        return cached
+    resp = rl_get(url, timeout=30)
+    if resp.status_code != 200:
+        raise RuntimeError(f"OWID fetch failed ({resp.status_code})")
+    df = pd.read_csv(io.BytesIO(resp.content))
+    if not set(["Code","Year","Value"]).issubset(df.columns):
+        raise RuntimeError("Unexpected OWID CSV format")
+    df = df[df["Code"] == country_code]
+    df = df.rename(columns={"Year":"year","Value":"value"})[["year","value"]].dropna()
+    df = df.sort_values("year")
+    if df.empty:
+        raise RuntimeError("No OWID data for specified country/indicator")
+    cache_df(ck, df)
+    return df
+
+
+def fetch_oecd_series(dataset: str, key: str) -> pd.DataFrame:
+    """Fetch a series from OECD SDMX-JSON CSV output; expects TIME_PERIOD and Value columns."""
+    url = f"https://stats.oecd.org/sdmx-json/data/{dataset}/{key}?contentType=csv"
+    ck = f"oecd::{dataset}::{key}"
+    cached = load_cache_df(ck)
+    if cached is not None and not cached.empty:
+        return cached
+    resp = rl_get(url, timeout=30)
+    if resp.status_code != 200:
+        raise RuntimeError(f"OECD fetch failed ({resp.status_code})")
+    df = pd.read_csv(io.BytesIO(resp.content))
+    if not set(["TIME_PERIOD","Value"]).issubset(df.columns):
+        raise RuntimeError("Unexpected OECD CSV format; please adjust dataset/key")
+    def parse_year(x):
+        try:
+            return int(str(x)[:4])
+        except Exception:
+            return None
+    df["year"] = df["TIME_PERIOD"].apply(parse_year)
+    df = df.dropna(subset=["year","Value"]).copy()
+    df["year"] = df["year"].astype(int)
+    df = df.rename(columns={"Value":"value"})[["year","value"]].sort_values("year")
+    if df.empty:
+        raise RuntimeError("No OECD data after parsing")
+    cache_df(ck, df)
+    return df
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -333,6 +468,28 @@ async def predict_wb(country: str, indicators: str, horizon: int = 5, model: str
             "indicator_name": SUPPORTED_INDICATORS.get(tgt, {}).get("name"),
             "sdg": SUPPORTED_INDICATORS.get(tgt, {}).get("sdg"),
         }
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/predict_owid")
+async def predict_owid(indicator: str, country: str, horizon: int = 5, model: str = "linear"):
+    try:
+        df = fetch_owid_series(indicator=indicator, country_code=country)
+        result = _train_and_forecast(df, horizon=horizon, target_column="value", model=model, indicator=indicator)
+        result["meta"] = {"source": "OWID", "indicator": indicator, "country": country}
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/predict_oecd")
+async def predict_oecd(dataset: str, key: str, horizon: int = 5, model: str = "linear"):
+    try:
+        df = fetch_oecd_series(dataset=dataset, key=key)
+        result = _train_and_forecast(df, horizon=horizon, target_column="value", model=model, indicator=dataset)
+        result["meta"] = {"source": "OECD", "dataset": dataset, "key": key}
         return result
     except Exception as e:
         return {"error": str(e)}

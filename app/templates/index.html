@@ -8,13 +8,34 @@
 </head>
 <body class="section">
   <div class="container">
-    <h1 class="title">SDGs AI Dashboard</h1>
-    <p class="subtitle">공개 데이터와 머신러닝으로 SDGs 지표를 예측합니다.</p>
+    <div class="level">
+      <div class="level-left">
+        <div>
+          <h1 class="title">SDGs AI Dashboard</h1>
+          <p class="subtitle" id="tagline">공개 데이터와 머신러닝으로 SDGs 지표를 예측합니다.</p>
+        </div>
+      </div>
+      <div class="level-right">
+        <div class="field has-addons">
+          <p class="control">
+            <span class="select">
+              <select id="lang-select">
+                <option value="ko" selected>한국어</option>
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+                <option value="zh">中文</option>
+                <option value="ja">日本語</option>
+              </select>
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
 
     <div class="tabs is-boxed">
       <ul>
-        <li class="is-active" data-tab="upload"><a>CSV 업로드</a></li>
-        <li data-tab="worldbank"><a>World Bank API</a></li>
+        <li class="is-active" data-tab="upload"><a id="tab-upload-label">CSV 업로드</a></li>
+        <li data-tab="worldbank"><a id="tab-wb-label">World Bank API</a></li>
       </ul>
     </div>
 
@@ -140,6 +161,70 @@
   </div>
 
   <script>
+    // i18n strings
+    const I18N = {
+      ko: {
+        tagline: '공개 데이터와 머신러닝으로 SDGs 지표를 예측합니다.',
+        tabUpload: 'CSV 업로드', tabWB: 'World Bank API',
+        csvLabel: '데이터 CSV', csvHelp: '열 이름에 year, value(또는 선택한 타겟) 포함',
+        horizon: '예측 기간(년)', target: '타겟 컬럼명', model: '모델',
+        run: '예측 실행', download: '예시 CSV 다운로드',
+        sampleTitle: '예시 CSV 포맷', country: '국가 코드 (ISO2 또는 ISO3)',
+        indicator: '지표 선택', wbRun: 'API로 예측',
+        msgUploading: '예측을 수행 중입니다...', msgPickCSV: 'CSV 파일을 선택해주세요.',
+        msgWBRunning: 'World Bank 데이터로 예측 중...', msgWBMissing: '국가와 지표를 선택해주세요.',
+        chartPast: '과거 추세', chartFuture: '미래 예측', chartUpper: '예측 상한', chartLower: '예측 하한'
+      },
+      en: {
+        tagline: 'Forecast SDG indicators using open data and machine learning.',
+        tabUpload: 'CSV Upload', tabWB: 'World Bank API',
+        csvLabel: 'Data CSV', csvHelp: 'Include year and value (or chosen target) columns',
+        horizon: 'Forecast horizon (years)', target: 'Target column', model: 'Model',
+        run: 'Run forecast', download: 'Download sample CSVs',
+        sampleTitle: 'Sample CSV format', country: 'Country code (ISO2/ISO3)',
+        indicator: 'Indicator', wbRun: 'Forecast via API',
+        msgUploading: 'Running forecast...', msgPickCSV: 'Please select a CSV file.',
+        msgWBRunning: 'Forecasting with World Bank data...', msgWBMissing: 'Please select country and indicator.',
+        chartPast: 'Historical', chartFuture: 'Forecast', chartUpper: 'PI Upper', chartLower: 'PI Lower'
+      },
+      fr: {
+        tagline: 'Prédire les indicateurs ODD avec des données ouvertes et le machine learning.',
+        tabUpload: 'Téléverser CSV', tabWB: 'API World Bank',
+        csvLabel: 'CSV de données', csvHelp: 'Inclure les colonnes year et value (ou cible)',
+        horizon: 'Horizon de prévision (années)', target: 'Colonne cible', model: 'Modèle',
+        run: 'Lancer la prévision', download: 'Télécharger CSV exemples',
+        sampleTitle: 'Format CSV exemple', country: 'Code pays (ISO2/ISO3)',
+        indicator: 'Indicateur', wbRun: 'Prédire via API',
+        msgUploading: 'Exécution de la prévision...', msgPickCSV: 'Veuillez sélectionner un fichier CSV.',
+        msgWBRunning: 'Prévision avec données World Bank...', msgWBMissing: 'Veuillez sélectionner un pays et un indicateur.',
+        chartPast: 'Historique', chartFuture: 'Prévision', chartUpper: 'Borne sup. PI', chartLower: 'Borne inf. PI'
+      },
+      zh: {
+        tagline: '利用开放数据和机器学习预测可持续发展目标指标。',
+        tabUpload: '上传 CSV', tabWB: '世界银行 API',
+        csvLabel: '数据 CSV', csvHelp: '包含 year 与 value（或所选目标）列',
+        horizon: '预测期（年）', target: '目标列', model: '模型',
+        run: '运行预测', download: '下载示例 CSV',
+        sampleTitle: '示例 CSV 格式', country: '国家代码（ISO2/ISO3）',
+        indicator: '指标', wbRun: '通过 API 预测',
+        msgUploading: '正在运行预测…', msgPickCSV: '请选择 CSV 文件。',
+        msgWBRunning: '正在使用世界银行数据预测…', msgWBMissing: '请选择国家和指标。',
+        chartPast: '历史趋势', chartFuture: '未来预测', chartUpper: 'PI 上限', chartLower: 'PI 下限'
+      },
+      ja: {
+        tagline: 'オープンデータと機械学習でSDGs指標を予測します。',
+        tabUpload: 'CSVアップロード', tabWB: '世界銀行API',
+        csvLabel: 'データCSV', csvHelp: 'year と value（または選択したターゲット）列を含めてください',
+        horizon: '予測期間（年）', target: 'ターゲット列', model: 'モデル',
+        run: '予測実行', download: 'サンプルCSVをダウンロード',
+        sampleTitle: 'サンプルCSV形式', country: '国コード（ISO2/ISO3）',
+        indicator: '指標', wbRun: 'APIで予測',
+        msgUploading: '予測を実行しています…', msgPickCSV: 'CSVファイルを選択してください。',
+        msgWBRunning: '世界銀行データで予測中…', msgWBMissing: '国と指標を選択してください。',
+        chartPast: '過去推移', chartFuture: '将来予測', chartUpper: 'PI上限', chartLower: 'PI下限'
+      }
+    };
+
     const tabs = document.querySelectorAll('.tabs li');
     const tabUpload = document.getElementById('tab-upload');
     const tabWB = document.getElementById('tab-worldbank');

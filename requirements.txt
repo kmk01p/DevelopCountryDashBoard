@@ -5,3 +5,8 @@ pandas
 scikit-learn
 jinja2
 python-multipart
+# Optional models (auto-enabled if installed)
+pmdarima
+xgboost
+# For saving parquet caches
+pyarrow
