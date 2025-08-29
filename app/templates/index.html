@@ -42,6 +42,18 @@
                 <input class="input" type="text" id="target_column" name="target_column" value="value">
               </div>
             </div>
+            <div class="field">
+              <label class="label">모델</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select id="csv-model" name="model">
+                    <option value="linear" selected>Linear</option>
+                    <option value="arima">ARIMA</option>
+                    <option value="xgboost">XGBoost</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -93,6 +105,16 @@
             <label class="label">예측 기간(년)</label>
             <input id="wb-horizon" class="input" type="number" value="5" min="1" max="30">
           </div>
+          <div class="column is-3">
+            <label class="label">모델</label>
+            <div class="select is-fullwidth">
+              <select id="wb-model">
+                <option value="linear" selected>Linear</option>
+                <option value="arima">ARIMA</option>
+                <option value="xgboost">XGBoost</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div class="field">
           <button id="wb-run" class="button is-primary">API로 예측</button>
@@ -139,7 +161,7 @@
       msg.textContent = text;
     }
 
-    function renderChart(histYears, histVals, futYears, futVals, title='SDGs 지표 예측') {
+    function renderChart(histYears, histVals, futYears, futVals, title='SDGs 지표 예측', futLow=null, futHigh=null) {
       const labels = histYears.concat(futYears);
       const histLen = histYears.length;
       if (chart) chart.destroy();
@@ -153,6 +175,24 @@
               data: labels.map((y, i) => i < histLen ? histVals[i] : null),
               borderColor: 'rgba(54, 162, 235, 1)',
               backgroundColor: 'rgba(54, 162, 235, 0.2)',
+              spanGaps: true,
+            },
+            {
+              label: '예측 상한',
+              data: labels.map((y, i) => (i >= histLen && futHigh) ? futHigh[i - histLen] : null),
+              borderColor: 'rgba(255, 99, 132, 0.0)',
+              backgroundColor: 'rgba(255, 99, 132, 0.1)',
+              pointRadius: 0,
+              fill: false,
+              spanGaps: true,
+            },
+            {
+              label: '예측 하한',
+              data: labels.map((y, i) => (i >= histLen && futLow) ? futLow[i - histLen] : null),
+              borderColor: 'rgba(255, 99, 132, 0.0)',
+              backgroundColor: 'rgba(255, 99, 132, 0.1)',
+              pointRadius: 0,
+              fill: '-1',
               spanGaps: true,
             },
             {
@@ -192,6 +232,9 @@
         return;
       }
       try {
+        // ensure model field is included
+        const modelSel = document.getElementById('csv-model');
+        if (modelSel && !data.get('model')) data.append('model', modelSel.value);
         const res = await fetch('/predict', { method: 'POST', body: data });
         const json = await res.json();
         if (json.error) { showMessage(json.error, 'is-danger'); return; }
@@ -200,8 +243,8 @@
         const histVals = json.historical[document.getElementById('target_column').value];
         const futYears = json.forecast.year;
         const futVals = json.forecast.pred;
-        const title = `SDGs 지표 예측 (R2: ${json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3)})`;
-        renderChart(histYears, histVals, futYears, futVals, title);
+        const title = `SDGs 지표 예측 (Model: ${json.metrics.model || 'n/a'}, R2: ${json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3)})`;
+        renderChart(histYears, histVals, futYears, futVals, title, json.forecast.pi_low, json.forecast.pi_high);
       } catch (err) {
         console.error(err);
         showMessage('예측 중 오류가 발생했습니다.', 'is-danger');
@@ -221,6 +264,22 @@
           opt.textContent = `${item.code} - ${item.name} (${item.sdg})`;
           sel.appendChild(opt);
         });
+        // model capabilities
+        const modelSelCSV = document.getElementById('csv-model');
+        const modelSelWB = document.getElementById('wb-model');
+        const caps = json.capabilities || {};
+        const allModels = ['linear','arima','xgboost'];
+        [modelSelCSV, modelSelWB].forEach(ms => {
+          if (!ms) return;
+          Array.from(ms.options).forEach(opt => {
+            const enabled = caps[opt.value] !== false; // linear always true
+            opt.disabled = !enabled;
+          });
+          // fallback if selected disabled
+          if (ms.selectedOptions[0] && ms.selectedOptions[0].disabled) {
+            ms.value = 'linear';
+          }
+        });
       } catch (e) {
         console.error(e);
       }
@@ -231,26 +290,28 @@
       const c = document.getElementById('wb-country').value.trim();
       const ind = document.getElementById('wb-indicator').value;
       const hz = parseInt(document.getElementById('wb-horizon').value, 10) || 5;
+      const mdl = document.getElementById('wb-model').value || 'linear';
       if (!c || !ind) { showMessage('국가와 지표를 선택해주세요.', 'is-danger'); return; }
       showMessage('World Bank 데이터로 예측 중...', 'is-info');
       try {
-        const url = `/predict_wb?country=${encodeURIComponent(c)}&indicator=${encodeURIComponent(ind)}&horizon=${hz}`;
+        const url = `/predict_wb?country=${encodeURIComponent(c)}&indicators=${encodeURIComponent(ind)}&horizon=${hz}&model=${encodeURIComponent(mdl)}`;
         const res = await fetch(url);
         const json = await res.json();
         if (json.error) { showMessage(json.error, 'is-danger'); return; }
         msg.className = 'notification is-hidden';
         const histYears = json.historical.year;
-        const histVals = json.historical.value;
+        const tgt = (json.meta && json.meta.target_indicator) || 'value';
+        const histVals = json.historical[tgt];
         const futYears = json.forecast.year;
         const futVals = json.forecast.pred;
         const metaDiv = document.getElementById('wb-meta');
         const r2 = json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3);
         metaDiv.innerHTML = `
-          <p><strong>국가:</strong> ${json.meta.country} &nbsp; <strong>지표:</strong> ${json.meta.indicator} - ${json.meta.indicator_name || ''} &nbsp; <strong>연관 SDG:</strong> ${json.meta.sdg || ''}</p>
-          <p><strong>검증 R2:</strong> ${r2}</p>
+          <p><strong>국가:</strong> ${json.meta.country} &nbsp; <strong>타겟:</strong> ${json.meta.target_indicator} - ${json.meta.indicator_name || ''} &nbsp; <strong>연관 SDG:</strong> ${json.meta.sdg || ''}</p>
+          <p><strong>모델:</strong> ${json.metrics.model || ''} &nbsp; <strong>검증 R2:</strong> ${r2}</p>
         `;
-        const title = `${json.meta.indicator_name || json.meta.indicator} (${json.meta.sdg || ''}) - 예측 (R2: ${r2})`;
-        renderChart(histYears, histVals, futYears, futVals, title);
+        const title = `${json.meta.indicator_name || json.meta.target_indicator} (${json.meta.sdg || ''}) - 예측 (Model: ${json.metrics.model || ''}, R2: ${r2})`;
+        renderChart(histYears, histVals, futYears, futVals, title, json.forecast.pi_low, json.forecast.pi_high);
       } catch (e) {
         console.error(e);
         showMessage('API 예측 중 오류가 발생했습니다.', 'is-danger');
