@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SDGs AI Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .pi-legend { font-size: 0.85rem; color: #666; }
+  </style>
+</head>
+<body class="section">
+  <div class="container">
+    <div class="level">
+      <div class="level-left">
+        <div>
+          <h1 class="title">SDGs AI Dashboard</h1>
+          <p class="subtitle" id="tagline">공개 데이터와 머신러닝으로 SDGs 지표를 예측합니다.</p>
+          <p id="intro-text" class="content is-small">이 웹사이트는 세계은행(World Bank), Our World in Data, OECD 등 공개 데이터를 불러와 SDGs 관련 지표의 추세와 예측을 시각화해 누구나 쉽게 이해할 수 있도록 돕습니다.</p>
+        </div>
+      </div>
+      <div class="level-right">
+        <div class="field has-addons">
+          <p class="control">
+            <span class="select">
+              <select id="lang-select">
+                <option value="ko" selected>한국어</option>
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+                <option value="zh">中文</option>
+                <option value="ja">日本語</option>
+              </select>
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs is-boxed">
+      <ul>
+        <li class="is-active" data-tab="upload"><a id="tab-upload-label">CSV 업로드</a></li>
+        <li data-tab="worldbank"><a id="tab-wb-label">World Bank API</a></li>
+        <li data-tab="owid"><a id="tab-owid-label">OWID</a></li>
+        <li data-tab="oecd"><a id="tab-oecd-label">OECD</a></li>
+      </ul>
+    </div>
+
+    <div id="tab-upload">
+      <form id="form" class="box">
+        <div class="field">
+          <label class="label" id="csv-label">데이터 CSV</label>
+          <div class="control">
+            <input class="input" type="file" id="file" name="file" accept=".csv" required>
+          </div>
+          <p class="help" id="csv-help">열 이름에 year, value(또는 선택한 타겟) 포함</p>
+        </div>
+
+        <div class="field is-horizontal">
+          <div class="field-body">
+            <div class="field">
+              <label class="label" id="csv-horizon-label">예측 기간(년)</label>
+              <div class="control">
+                <input class="input" type="number" id="horizon" name="horizon" value="5" min="1" max="30">
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" id="csv-target-label">타겟 컬럼명</label>
+              <div class="control">
+                <input class="input" type="text" id="target_column" name="target_column" value="value">
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" id="csv-model-label">모델</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select id="csv-model" name="model">
+                    <option value="linear" selected>Linear</option>
+                    <option value="arima">ARIMA</option>
+                    <option value="xgboost">XGBoost</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="control">
+            <button class="button is-primary" type="submit" id="csv-run-btn">예측 실행</button>
+            <a class="button is-light" href="/static/examples.zip" download id="csv-download-btn">예시 CSV 다운로드</a>
+          </div>
+        </div>
+      </form>
+
+      <article class="message is-info">
+        <div class="message-header">
+          <p id="csv-sample-title">예시 CSV 포맷</p>
+        </div>
+        <div class="message-body">
+          <pre>year,value
+2010,85.1
+2011,86.3
+2012,87.0
+2013,88.9
+2014,90.1
+2015,91.4
+2016,92.0
+2017,92.5
+2018,93.0
+2019,93.4
+2020,93.7</pre>
+        </div>
+      </article>
+    </div>
+
+    <div id="tab-worldbank" class="is-hidden">
+      <div class="box">
+        <div class="columns is-multiline">
+          <div class="column is-4">
+            <label class="label" id="wb-country-label">국가 코드 (ISO2 또는 ISO3)</label>
+            <input id="wb-country" class="input" type="text" placeholder="KR, USA, IND 등" value="KOR">
+            <p class="help" id="wb-country-help">예: KOR(대한민국), USA(미국), IND(인도)</p>
+          </div>
+          <div class="column is-5">
+            <label class="label" id="wb-indicator-label">지표 선택 (여러 개 선택 가능)</label>
+            <div class="select is-fullwidth">
+              <select id="wb-indicator" multiple size="8"></select>
+            </div>
+            <p class="help" id="wb-indicator-help">World Bank 지표 코드</p>
+          </div>
+          <div class="column is-3">
+            <label class="label" id="wb-horizon-label">예측 기간(년)</label>
+            <input id="wb-horizon" class="input" type="number" value="5" min="1" max="30">
+          </div>
+          <div class="column is-3">
+            <label class="label" id="wb-model-label">모델</label>
+            <div class="select is-fullwidth">
+              <select id="wb-model">
+                <option value="linear" selected>Linear</option>
+                <option value="arima">ARIMA</option>
+                <option value="xgboost">XGBoost</option>
+              </select>
+            </div>
+          </div>
+          <div class="column is-5">
+            <label class="label" id="wb-targetind-label">타겟 지표</label>
+            <div class="select is-fullwidth">
+              <select id="wb-target-indicator"></select>
+            </div>
+            <p class="help" id="wb-targetind-help">여러 지표를 특성으로 사용하고 여기에 선택된 타겟을 예측합니다.</p>
+          </div>
+        </div>
+        <div class="field">
+          <button id="wb-run" class="button is-primary">API로 예측</button>
+        </div>
+        <div id="wb-meta" class="content is-small"></div>
+      </div>
+    </div>
+
+    <div id="tab-owid" class="is-hidden">
+      <div class="box">
+        <div class="columns is-multiline">
+          <div class="column is-4">
+            <label class="label" id="owid-ind-label">OWID 지표 코드</label>
+            <input id="owid-indicator" class="input" type="text" placeholder="co2, air-pollution, ...">
+          </div>
+          <div class="column is-4">
+            <label class="label" id="owid-country-label">국가 코드 (ISO3)</label>
+            <input id="owid-country" class="input" type="text" value="KOR">
+          </div>
+          <div class="column is-2">
+            <label class="label" id="owid-hz-label">예측 기간(년)</label>
+            <input id="owid-horizon" class="input" type="number" value="5" min="1" max="30">
+          </div>
+          <div class="column is-2">
+            <label class="label" id="owid-model-label">모델</label>
+            <div class="select is-fullwidth">
+              <select id="owid-model">
+                <option value="linear" selected>Linear</option>
+                <option value="arima">ARIMA</option>
+                <option value="xgboost">XGBoost</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <button id="owid-run" class="button is-primary">OWID로 예측</button>
+        </div>
+        <div id="owid-meta" class="content is-small"></div>
+      </div>
+    </div>
+
+    <div id="tab-oecd" class="is-hidden">
+      <div class="box">
+        <div class="columns is-multiline">
+          <div class="column is-4">
+            <label class="label" id="oecd-dataset-label">OECD 데이터셋</label>
+            <input id="oecd-dataset" class="input" type="text" placeholder="MEI_CLI, ...">
+          </div>
+          <div class="column is-4">
+            <label class="label" id="oecd-key-label">키</label>
+            <input id="oecd-key" class="input" type="text" placeholder="e.g., KOR.MAIN" />
+          </div>
+          <div class="column is-2">
+            <label class="label" id="oecd-hz-label">예측 기간(년)</label>
+            <input id="oecd-horizon" class="input" type="number" value="5" min="1" max="30">
+          </div>
+          <div class="column is-2">
+            <label class="label" id="oecd-model-label">모델</label>
+            <div class="select is-fullwidth">
+              <select id="oecd-model">
+                <option value="linear" selected>Linear</option>
+                <option value="arima">ARIMA</option>
+                <option value="xgboost">XGBoost</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <button id="oecd-run" class="button is-primary">OECD로 예측</button>
+        </div>
+        <div id="oecd-meta" class="content is-small"></div>
+      </div>
+    </div>
+
+    <div id="msg" class="notification is-hidden"></div>
+
+    <div class="box">
+      <canvas id="chart"></canvas>
+      <p class="pi-legend" id="pi-legend-text">예측 밴드(하한~상한)는 95% 신뢰구간(PI)을 나타냅니다.</p>
+      <div id="achievements" class="mt-3"></div>
+    </div>
+
+    <div class="content is-small">
+      <p>서버에 저장된 예시 파일들:</p>
+      <ul>
+        <li><code>app/data/examples/example_education_kor.csv</code></li>
+        <li><code>app/data/examples/example_climate_usa.csv</code></li>
+        <li><code>app/data/examples/example_poverty_ind.csv</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // i18n strings
+    const I18N = {
+      ko: {
+        tagline: '공개 데이터와 머신러닝으로 SDGs 지표를 예측합니다.',
+        intro: '이 웹사이트는 세계은행(World Bank), Our World in Data, OECD 등 공개 데이터를 불러와 SDGs 관련 지표의 추세와 예측을 시각화해 누구나 쉽게 이해할 수 있도록 돕습니다.',
+        tabUpload: 'CSV 업로드', tabWB: 'World Bank API', tabOWID: 'OWID', tabOECD: 'OECD',
+        csvLabel: '데이터 CSV', csvHelp: '열 이름에 year, value(또는 선택한 타겟) 포함',
+        horizon: '예측 기간(년)', target: '타겟 컬럼명', model: '모델',
+        run: '예측 실행', download: '예시 CSV 다운로드',
+        sampleTitle: '예시 CSV 포맷', country: '국가 코드 (ISO2 또는 ISO3)',
+        indicator: '지표 선택 (여러 개 선택 가능)', indicatorHelp: 'World Bank 지표 코드',
+        wbRun: 'API로 예측', wbTarget: '타겟 지표', wbTargetHelp: '여러 지표를 특성으로 사용하고 여기에 선택된 타겟을 예측합니다.',
+        msgUploading: '예측을 수행 중입니다...', msgPickCSV: 'CSV 파일을 선택해주세요.',
+        msgWBRunning: 'World Bank 데이터로 예측 중...', msgWBMissing: '국가와 지표를 선택해주세요.',
+        chartPast: '과거 추세', chartFuture: '미래 예측', chartUpper: '예측 상한', chartLower: '예측 하한',
+        piLegend: '예측 밴드(하한~상한)는 95% 신뢰구간(PI)을 나타냅니다.',
+        owidInd: 'OWID 지표 코드', owidCountry: '국가 코드 (ISO3)', owidRun: 'OWID로 예측',
+        oecdDataset: 'OECD 데이터셋', oecdKey: '키', oecdRun: 'OECD로 예측',
+        achievementNow: '현재 달성도', achievementForecast: '예측 달성도'
+      },
+      en: {
+        tagline: 'Forecast SDG indicators using open data and machine learning.',
+        intro: 'This website fetches open data (World Bank, Our World in Data, OECD) to visualize trends and forecasts for SDG-related indicators so anyone can easily understand.',
+        tabUpload: 'CSV Upload', tabWB: 'World Bank API', tabOWID: 'OWID', tabOECD: 'OECD',
+        csvLabel: 'Data CSV', csvHelp: 'Include year and value (or chosen target) columns',
+        horizon: 'Forecast horizon (years)', target: 'Target column', model: 'Model',
+        run: 'Run forecast', download: 'Download sample CSVs',
+        sampleTitle: 'Sample CSV format', country: 'Country code (ISO2/ISO3)',
+        indicator: 'Indicators (multi-select)', indicatorHelp: 'World Bank indicator codes',
+        wbRun: 'Forecast via API', wbTarget: 'Target indicator', wbTargetHelp: 'Use multiple indicators as features and predict this selected target.',
+        msgUploading: 'Running forecast...', msgPickCSV: 'Please select a CSV file.',
+        msgWBRunning: 'Forecasting with World Bank data...', msgWBMissing: 'Please select country and at least one indicator.',
+        chartPast: 'Historical', chartFuture: 'Forecast', chartUpper: 'PI Upper', chartLower: 'PI Lower',
+        piLegend: 'The shaded band (lower~upper) shows a 95% prediction interval (PI).',
+        owidInd: 'OWID indicator', owidCountry: 'Country code (ISO3)', owidRun: 'Forecast with OWID',
+        oecdDataset: 'OECD Dataset', oecdKey: 'Key', oecdRun: 'Forecast with OECD',
+        achievementNow: 'Current progress', achievementForecast: 'Forecast progress'
+      },
+      fr: {
+        tagline: 'Prédire les indicateurs ODD avec des données ouvertes et le machine learning.',
+        intro: 'Ce site récupère des données ouvertes (Banque mondiale, Our World in Data, OCDE) pour visualiser les tendances et prévisions liées aux ODD, accessibles à tous.',
+        tabUpload: 'Téléverser CSV', tabWB: 'API World Bank', tabOWID: 'OWID', tabOECD: 'OCDE',
+        csvLabel: 'CSV de données', csvHelp: 'Inclure les colonnes year et value (ou cible)',
+        horizon: 'Horizon de prévision (années)', target: 'Colonne cible', model: 'Modèle',
+        run: 'Lancer la prévision', download: 'Télécharger CSV exemples',
+        sampleTitle: 'Format CSV exemple', country: 'Code pays (ISO2/ISO3)',
+        indicator: 'Indicateurs (sélection multiple)', indicatorHelp: 'Codes des indicateurs Banque mondiale',
+        wbRun: 'Prédire via API', wbTarget: 'Indicateur cible', wbTargetHelp: 'Utilisez plusieurs indicateurs comme variables et prédisez cette cible.',
+        msgUploading: 'Exécution de la prévision...', msgPickCSV: 'Veuillez sélectionner un fichier CSV.',
+        msgWBRunning: 'Prévision avec données World Bank...', msgWBMissing: 'Veuillez sélectionner un pays et au moins un indicateur.',
+        chartPast: 'Historique', chartFuture: 'Prévision', chartUpper: 'Borne sup. PI', chartLower: 'Borne inf. PI',
+        piLegend: "La zone (inférieure~supérieure) représente l'intervalle de prédiction (95%).",
+        owidInd: 'Indicateur OWID', owidCountry: 'Code pays (ISO3)', owidRun: 'Prévoir avec OWID',
+        oecdDataset: 'Jeu de données OCDE', oecdKey: 'Clé', oecdRun: 'Prévoir avec OCDE',
+        achievementNow: 'Progrès actuel', achievementForecast: 'Progrès prévu'
+      },
+      zh: {
+        tagline: '利用开放数据和机器学习预测可持续发展目标指标。',
+        intro: '本网站从世界银行、OWID、OECD 等开放数据源获取数据，直观展示 SDG 指标的趋势与预测，帮助任何人轻松理解。',
+        tabUpload: '上传 CSV', tabWB: '世界银行 API', tabOWID: 'OWID', tabOECD: 'OECD',
+        csvLabel: '数据 CSV', csvHelp: '包含 year 与 value（或所选目标）列',
+        horizon: '预测期（年）', target: '目标列', model: '模型',
+        run: '运行预测', download: '下载示例 CSV',
+        sampleTitle: '示例 CSV 格式', country: '国家代码（ISO2/ISO3）',
+        indicator: '选择指标（可多选）', indicatorHelp: '世界银行指标代码',
+        wbRun: '通过 API 预测', wbTarget: '目标指标', wbTargetHelp: '使用多个指标作为特征，预测所选目标。',
+        msgUploading: '正在运行预测…', msgPickCSV: '请选择 CSV 文件。',
+        msgWBRunning: '正在使用世界银行数据预测…', msgWBMissing: '请选择国家并至少一个指标。',
+        chartPast: '历史趋势', chartFuture: '未来预测', chartUpper: 'PI 上限', chartLower: 'PI 下限',
+        piLegend: '阴影带（下限~上限）表示 95% 预测区间（PI）。',
+        owidInd: 'OWID 指标', owidCountry: '国家代码（ISO3）', owidRun: '使用 OWID 预测',
+        oecdDataset: 'OECD 数据集', oecdKey: '键', oecdRun: '使用 OECD 预测',
+        achievementNow: '当前达成度', achievementForecast: '预测达成度'
+      },
+      ja: {
+        tagline: 'オープンデータと機械学習でSDGs指標を予測します。',
+        intro: '本サイトは世界銀行、OWID、OECD などのオープンデータを取得し、SDGs 指標の推移と予測を分かりやすく可視化します。',
+        tabUpload: 'CSVアップロード', tabWB: '世界銀行API', tabOWID: 'OWID', tabOECD: 'OECD',
+        csvLabel: 'データCSV', csvHelp: 'year と value（または選択したターゲット）列を含めてください',
+        horizon: '予測期間（年）', target: 'ターゲット列', model: 'モデル',
+        run: '予測実行', download: 'サンプルCSVをダウンロード',
+        sampleTitle: 'サンプルCSV形式', country: '国コード（ISO2/ISO3）',
+        indicator: '指標を選択（複数可）', indicatorHelp: '世界銀行の指標コード',
+        wbRun: 'APIで予測', wbTarget: 'ターゲット指標', wbTargetHelp: '複数の指標を特徴量にし、選択したターゲットを予測します。',
+        msgUploading: '予測を実行しています…', msgPickCSV: 'CSVファイルを選択してください。',
+        msgWBRunning: '世界銀行データで予測中…', msgWBMissing: '国と少なくとも1つの指標を選択してください。',
+        chartPast: '過去推移', chartFuture: '将来予測', chartUpper: 'PI上限', chartLower: 'PI下限',
+        piLegend: 'シェード部分（下限~上限）は95%予測区間（PI）です。',
+        owidInd: 'OWID 指標', owidCountry: '国コード（ISO3）', owidRun: 'OWIDで予測',
+        oecdDataset: 'OECD データセット', oecdKey: 'キー', oecdRun: 'OECDで予測',
+        achievementNow: '現在の達成度', achievementForecast: '予測達成度'
+      }
+    };
+
+    function applyLang(lang) {
+      const t = I18N[lang] || I18N.ko;
+      document.getElementById('tagline').textContent = t.tagline;
+      document.getElementById('intro-text').textContent = t.intro;
+      document.getElementById('tab-upload-label').textContent = t.tabUpload;
+      document.getElementById('tab-wb-label').textContent = t.tabWB;
+      document.getElementById('tab-owid-label').textContent = t.tabOWID;
+      document.getElementById('tab-oecd-label').textContent = t.tabOECD;
+      document.getElementById('csv-label').textContent = t.csvLabel;
+      document.getElementById('csv-help').textContent = t.csvHelp;
+      document.getElementById('csv-horizon-label').textContent = t.horizon;
+      document.getElementById('csv-target-label').textContent = t.target;
+      document.getElementById('csv-model-label').textContent = t.model;
+      document.getElementById('csv-run-btn').textContent = t.run;
+      document.getElementById('csv-download-btn').textContent = t.download;
+      document.getElementById('csv-sample-title').textContent = t.sampleTitle;
+      document.getElementById('wb-country-label').textContent = t.country;
+      document.getElementById('wb-country-help').textContent = lang==='en' ? '(e.g., KOR for Korea, USA for United States, IND for India)' : document.getElementById('wb-country-help').textContent;
+      document.getElementById('wb-indicator-label').textContent = t.indicator;
+      document.getElementById('wb-indicator-help').textContent = t.indicatorHelp;
+      document.getElementById('wb-horizon-label').textContent = t.horizon;
+      document.getElementById('wb-model-label').textContent = t.model;
+      document.getElementById('wb-targetind-label').textContent = t.wbTarget;
+      document.getElementById('wb-targetind-help').textContent = t.wbTargetHelp;
+      document.getElementById('wb-run').textContent = t.wbRun;
+      document.getElementById('owid-ind-label').textContent = t.owidInd;
+      document.getElementById('owid-country-label').textContent = t.owidCountry;
+      document.getElementById('owid-hz-label').textContent = t.horizon;
+      document.getElementById('owid-model-label').textContent = t.model;
+      document.getElementById('owid-run').textContent = t.owidRun;
+      document.getElementById('oecd-dataset-label').textContent = t.oecdDataset;
+      document.getElementById('oecd-key-label').textContent = t.oecdKey;
+      document.getElementById('oecd-hz-label').textContent = t.horizon;
+      document.getElementById('oecd-model-label').textContent = t.model;
+      document.getElementById('oecd-run').textContent = t.oecdRun;
+      document.getElementById('pi-legend-text').textContent = t.piLegend;
+    }
+
+    const tabs = document.querySelectorAll('.tabs li');
+    const tabUpload = document.getElementById('tab-upload');
+    const tabWB = document.getElementById('tab-worldbank');
+    const tabOWID = document.getElementById('tab-owid');
+    const tabOECD = document.getElementById('tab-oecd');
+    tabs.forEach(li => li.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('is-active'));
+      li.classList.add('is-active');
+      const tab = li.getAttribute('data-tab');
+      [tabUpload, tabWB, tabOWID, tabOECD].forEach(el => el.classList.add('is-hidden'));
+      if (tab === 'upload') tabUpload.classList.remove('is-hidden');
+      if (tab === 'worldbank') tabWB.classList.remove('is-hidden');
+      if (tab === 'owid') tabOWID.classList.remove('is-hidden');
+      if (tab === 'oecd') tabOECD.classList.remove('is-hidden');
+    }));
+
+    const form = document.getElementById('form');
+    const msg = document.getElementById('msg');
+    const ctx = document.getElementById('chart').getContext('2d');
+    let chart;
+
+    function showMessage(text, type='is-info') {
+      msg.className = `notification ${type}`;
+      msg.textContent = text;
+    }
+
+    function renderChart(histYears, histVals, futYears, futVals, title='SDGs 지표 예측', futLow=null, futHigh=null) {
+      const labels = histYears.concat(futYears);
+      const histLen = histYears.length;
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: I18N[langSelect.value].chartPast,
+              data: labels.map((y, i) => i < histLen ? histVals[i] : null),
+              borderColor: 'rgba(54, 162, 235, 1)',
+              backgroundColor: 'rgba(54, 162, 235, 0.2)',
+              spanGaps: true,
+            },
+            {
+              label: I18N[langSelect.value].chartUpper,
+              data: labels.map((y, i) => (i >= histLen && futHigh) ? futHigh[i - histLen] : null),
+              borderColor: 'rgba(255, 99, 132, 0.0)',
+              backgroundColor: 'rgba(255, 99, 132, 0.1)',
+              pointRadius: 0,
+              fill: false,
+              spanGaps: true,
+            },
+            {
+              label: I18N[langSelect.value].chartLower,
+              data: labels.map((y, i) => (i >= histLen && futLow) ? futLow[i - histLen] : null),
+              borderColor: 'rgba(255, 99, 132, 0.0)',
+              backgroundColor: 'rgba(255, 99, 132, 0.1)',
+              pointRadius: 0,
+              fill: '-1',
+              spanGaps: true,
+            },
+            {
+              label: I18N[langSelect.value].chartFuture,
+              data: labels.map((y, i) => i >= histLen ? futVals[i - histLen] : null),
+              borderColor: 'rgba(255, 99, 132, 1)',
+              backgroundColor: 'rgba(255, 99, 132, 0.2)',
+              borderDash: [5,5],
+              spanGaps: true,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: { title: { display: true, text: 'Year' } },
+            y: { title: { display: true, text: 'Value' }, suggestedMin: 0 }
+          },
+          plugins: {
+            tooltip: { mode: 'index', intersect: false },
+            title: { display: true, text: title },
+            legend: { position: 'bottom' }
+          }
+        }
+      });
+    }
+
+    function renderAchievement(containerId, ach) {
+      const c = document.getElementById(containerId);
+      if (!ach || !ach.defined) { c.innerHTML = ''; return; }
+      const now = (ach.latest_progress_pct == null) ? 'N/A' : ach.latest_progress_pct.toFixed(1) + '%';
+      const fut = (ach.forecast_progress_pct == null) ? 'N/A' : ach.forecast_progress_pct.toFixed(1) + '%';
+      const t = I18N[langSelect.value];
+      c.innerHTML = `
+        <span class="tag is-info is-light">${t.achievementNow}: ${now}</span>
+        <span class="tag is-success is-light">${t.achievementForecast}: ${fut}</span>
+        <span class="tag is-light">Target: ${ach.target} ${ach.unit || ''} (${ach.direction})</span>
+      `;
+    }
+
+    // CSV Upload flow
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showMessage(I18N[langSelect.value].msgUploading, 'is-info');
+
+      const data = new FormData(form);
+      const fileInput = document.getElementById('file');
+      if (!fileInput.files[0]) {
+        showMessage(I18N[langSelect.value].msgPickCSV, 'is-danger');
+        return;
+      }
+      try {
+        const modelSel = document.getElementById('csv-model');
+        if (modelSel && !data.get('model')) data.append('model', modelSel.value);
+        const res = await fetch('/predict', { method: 'POST', body: data });
+        const json = await res.json();
+        if (json.error) { showMessage(json.error, 'is-danger'); return; }
+        msg.className = 'notification is-hidden';
+        const histYears = json.historical.year;
+        const histVals = json.historical[document.getElementById('target_column').value];
+        const futYears = json.forecast.year;
+        const futVals = json.forecast.pred;
+        const r2 = json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3);
+        const title = `SDGs Forecast (Model: ${json.metrics.model || 'n/a'}, R2: ${r2})`;
+        renderChart(histYears, histVals, futYears, futVals, title, json.forecast.pi_low, json.forecast.pi_high);
+        renderAchievement('achievements', json.achievement);
+      } catch (err) {
+        console.error(err);
+        showMessage('예측 중 오류가 발생했습니다.', 'is-danger');
+      }
+    });
+
+    // World Bank API flow
+    async function loadIndicators() {
+      try {
+        const res = await fetch('/api/indicators');
+        const json = await res.json();
+        const sel = document.getElementById('wb-indicator');
+        sel.innerHTML = '';
+        json.indicators.forEach(item => {
+          const opt = document.createElement('option');
+          opt.value = item.code;
+          opt.textContent = `${item.code} - ${item.name} (${item.sdg})`;
+          sel.appendChild(opt);
+        });
+        const targetSel = document.getElementById('wb-target-indicator');
+        function syncTargetOptions() {
+          const selected = Array.from(sel.selectedOptions).map(o => o.value);
+          targetSel.innerHTML = '';
+          selected.forEach(code => {
+            const o = document.createElement('option');
+            o.value = code; o.textContent = code; targetSel.appendChild(o);
+          });
+          if (targetSel.options.length && !Array.from(targetSel.options).some(o => o.selected)) {
+            targetSel.value = targetSel.options[0].value;
+          }
+        }
+        sel.addEventListener('change', syncTargetOptions);
+        // initialize with first item selected
+        if (sel.options.length) { sel.options[0].selected = true; }
+        syncTargetOptions();
+
+        // model capabilities
+        const modelSelCSV = document.getElementById('csv-model');
+        const modelSelWB = document.getElementById('wb-model');
+        const modelSelOWID = document.getElementById('owid-model');
+        const modelSelOECD = document.getElementById('oecd-model');
+        const caps = json.capabilities || {};
+        const modelSelects = [modelSelCSV, modelSelWB, modelSelOWID, modelSelOECD];
+        modelSelects.forEach(ms => {
+          if (!ms) return;
+          Array.from(ms.options).forEach(opt => {
+            const enabled = caps[opt.value] !== false; // linear always true
+            opt.disabled = !enabled;
+          });
+          if (ms.selectedOptions[0] && ms.selectedOptions[0].disabled) {
+            ms.value = 'linear';
+          }
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    loadIndicators();
+
+    document.getElementById('wb-run').addEventListener('click', async () => {
+      const c = document.getElementById('wb-country').value.trim();
+      const sel = document.getElementById('wb-indicator');
+      const selected = Array.from(sel.selectedOptions).map(o => o.value);
+      const hz = parseInt(document.getElementById('wb-horizon').value, 10) || 5;
+      const mdl = document.getElementById('wb-model').value || 'linear';
+      const tgt = document.getElementById('wb-target-indicator').value;
+      if (!c || selected.length === 0) { showMessage(I18N[langSelect.value].msgWBMissing, 'is-danger'); return; }
+      showMessage(I18N[langSelect.value].msgWBRunning, 'is-info');
+      try {
+        const url = `/predict_wb?country=${encodeURIComponent(c)}&indicators=${encodeURIComponent(selected.join(','))}&horizon=${hz}&model=${encodeURIComponent(mdl)}&target_indicator=${encodeURIComponent(tgt)}`;
+        const res = await fetch(url);
+        const json = await res.json();
+        if (json.error) { showMessage(json.error, 'is-danger'); return; }
+        msg.className = 'notification is-hidden';
+        const histYears = json.historical.year;
+        const targetKey = (json.meta && json.meta.target_indicator) || 'value';
+        const histVals = json.historical[targetKey];
+        const futYears = json.forecast.year;
+        const futVals = json.forecast.pred;
+        const metaDiv = document.getElementById('wb-meta');
+        const r2 = json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3);
+        metaDiv.innerHTML = `
+          <p><strong>국가:</strong> ${json.meta.country} &nbsp; <strong>타겟:</strong> ${json.meta.target_indicator} - ${json.meta.indicator_name || ''} &nbsp; <strong>연관 SDG:</strong> ${json.meta.sdg || ''}</p>
+          <p><strong>모델:</strong> ${json.metrics.model || ''} &nbsp; <strong>검증 R2:</strong> ${r2}</p>
+        `;
+        const title = `${json.meta.indicator_name || json.meta.target_indicator} (${json.meta.sdg || ''}) - 예측 (Model: ${json.metrics.model || ''}, R2: ${r2})`;
+        renderChart(histYears, histVals, futYears, futVals, title, json.forecast.pi_low, json.forecast.pi_high);
+        renderAchievement('achievements', json.achievement);
+      } catch (e) {
+        console.error(e);
+        showMessage('API 예측 중 오류가 발생했습니다.', 'is-danger');
+      }
+    });
+
+    // OWID flow
+    document.getElementById('owid-run').addEventListener('click', async () => {
+      const ind = document.getElementById('owid-indicator').value.trim();
+      const c = document.getElementById('owid-country').value.trim();
+      const hz = parseInt(document.getElementById('owid-horizon').value, 10) || 5;
+      const mdl = document.getElementById('owid-model').value || 'linear';
+      if (!ind || !c) { showMessage('지표와 국가를 입력하세요.', 'is-danger'); return; }
+      showMessage('OWID 데이터로 예측 중...', 'is-info');
+      try {
+        const res = await fetch(`/predict_owid?indicator=${encodeURIComponent(ind)}&country=${encodeURIComponent(c)}&horizon=${hz}&model=${encodeURIComponent(mdl)}`);
+        const json = await res.json();
+        if (json.error) { showMessage(json.error, 'is-danger'); return; }
+        msg.className = 'notification is-hidden';
+        const histYears = json.historical.year;
+        const histVals = json.historical.value;
+        const futYears = json.forecast.year;
+        const futVals = json.forecast.pred;
+        const metaDiv = document.getElementById('owid-meta');
+        const r2 = json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3);
+        metaDiv.innerHTML = `<p><strong>OWID:</strong> ${json.meta.indicator} &nbsp; <strong>국가:</strong> ${json.meta.country} &nbsp; <strong>모델:</strong> ${json.metrics.model} &nbsp; <strong>R2:</strong> ${r2}</p>`;
+        const title = `OWID ${json.meta.indicator} - Forecast (Model: ${json.metrics.model}, R2: ${r2})`;
+        renderChart(histYears, histVals, futYears, futVals, title, json.forecast.pi_low, json.forecast.pi_high);
+        renderAchievement('achievements', json.achievement);
+      } catch (e) {
+        console.error(e);
+        showMessage('OWID 예측 중 오류', 'is-danger');
+      }
+    });
+
+    // OECD flow
+    document.getElementById('oecd-run').addEventListener('click', async () => {
+      const ds = document.getElementById('oecd-dataset').value.trim();
+      const key = document.getElementById('oecd-key').value.trim();
+      const hz = parseInt(document.getElementById('oecd-horizon').value, 10) || 5;
+      const mdl = document.getElementById('oecd-model').value || 'linear';
+      if (!ds || !key) { showMessage('데이터셋과 키를 입력하세요.', 'is-danger'); return; }
+      showMessage('OECD 데이터로 예측 중...', 'is-info');
+      try {
+        const res = await fetch(`/predict_oecd?dataset=${encodeURIComponent(ds)}&key=${encodeURIComponent(key)}&horizon=${hz}&model=${encodeURIComponent(mdl)}`);
+        const json = await res.json();
+        if (json.error) { showMessage(json.error, 'is-danger'); return; }
+        msg.className = 'notification is-hidden';
+        const histYears = json.historical.year;
+        const histVals = json.historical.value;
+        const futYears = json.forecast.year;
+        const futVals = json.forecast.pred;
+        const metaDiv = document.getElementById('oecd-meta');
+        const r2 = json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3);
+        metaDiv.innerHTML = `<p><strong>OECD:</strong> ${json.meta.dataset}/${json.meta.key} &nbsp; <strong>모델:</strong> ${json.metrics.model} &nbsp; <strong>R2:</strong> ${r2}</p>`;
+        const title = `OECD ${json.meta.dataset}/${json.meta.key} - Forecast (Model: ${json.metrics.model}, R2: ${r2})`;
+        renderChart(histYears, histVals, futYears, futVals, title, json.forecast.pi_low, json.forecast.pi_high);
+        renderAchievement('achievements', json.achievement);
+      } catch (e) {
+        console.error(e);
+        showMessage('OECD 예측 중 오류', 'is-danger');
+      }
+    });
+
+    // language switching
+    const langSelect = document.getElementById('lang-select');
+    langSelect.addEventListener('change', () => applyLang(langSelect.value));
+    applyLang(langSelect.value);
+  </script>
+</body>
+</html>

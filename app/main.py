@@ -1,11 +1,11 @@
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, UploadFile, File, Form, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi import Request
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
+import numpy as np
 import io
 import requests
 from typing import Dict, Any, List, Optional, Tuple
@@ -15,492 +15,625 @@ import hashlib
 import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import json
+from datetime import datetime, timedelta
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import logging
 
-# Optional models
+# Import translations
+from translations import TRANSLATIONS, get_translation
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Optional models with auto-activation
 try:
-    import pmdarima as pm  # ARIMA
+    import pmdarima as pm
     HAS_ARIMA = True
-except Exception:
+    logger.info("✅ ARIMA model activated (pmdarima installed)")
+except ImportError:
     HAS_ARIMA = False
+    logger.warning("⚠️ ARIMA model not available (pmdarima not installed)")
 
 try:
     from xgboost import XGBRegressor
     HAS_XGB = True
-except Exception:
+    logger.info("✅ XGBoost model activated (xgboost installed)")
+except ImportError:
     HAS_XGB = False
+    logger.warning("⚠️ XGBoost model not available (xgboost not installed)")
 
-# Simple rate limiter and retry for external calls
-import time
-from functools import wraps
+app = FastAPI(title="Global SDGs Analytics Platform")
 
-LAST_CALL_TS = 0.0
-MIN_INTERVAL = 0.5  # seconds
-
-def rate_limited(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        global LAST_CALL_TS
-        wait = MIN_INTERVAL - (time.time() - LAST_CALL_TS)
-        if wait > 0:
-            time.sleep(wait)
-        for attempt in range(3):
-            try:
-                result = func(*args, **kwargs)
-                LAST_CALL_TS = time.time()
-                return result
-            except Exception:
-                if attempt == 2:
-                    raise
-                time.sleep(1.0 * (attempt + 1))  # backoff
-    return wrapper
-
-app = FastAPI(title="SDGs AI Dashboard")
-
-# Simple on-disk cache + rate-limited session for external data sources
+# Enhanced cache system with TTL
 CACHE_DIR = os.path.join("app", "data", "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
+CACHE_TTL = 3600 * 24  # 24 hours
 
-_session = None
-_last_call_ts = 0.0
-RATE_LIMIT_SECONDS = 0.2  # ~5 req/sec
+# Rate limiting configuration
+RATE_LIMITS = {
+    "world_bank": {"calls": 60, "period": 60},  # 60 calls per minute
+    "oecd": {"calls": 30, "period": 60},
+    "owid": {"calls": 30, "period": 60}
+}
 
+class RateLimiter:
+    def __init__(self, calls: int, period: int):
+        self.calls = calls
+        self.period = period
+        self.call_times = []
+    
+    def wait_if_needed(self):
+        now = time.time()
+        # Remove old calls outside the period
+        self.call_times = [t for t in self.call_times if now - t < self.period]
+        
+        if len(self.call_times) >= self.calls:
+            # Need to wait
+            sleep_time = self.period - (now - self.call_times[0]) + 0.1
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+        
+        self.call_times.append(now)
+
+# Initialize rate limiters
+rate_limiters = {
+    source: RateLimiter(**config) 
+    for source, config in RATE_LIMITS.items()
+}
+
+# Session with retry and backoff
 def get_session():
-    global _session
-    if _session is None:
-        s = requests.Session()
-        retries = Retry(total=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
-        s.mount("https://", HTTPAdapter(max_retries=retries))
-        s.mount("http://", HTTPAdapter(max_retries=retries))
-        _session = s
-    return _session
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1.0,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
 
-def rl_get(url: str, timeout: int = 30):
-    global _last_call_ts
-    now = time.time()
-    wait = _last_call_ts + RATE_LIMIT_SECONDS - now
-    if wait > 0:
-        time.sleep(wait)
-    resp = get_session().get(url, timeout=timeout)
-    _last_call_ts = time.time()
-    return resp
+session = get_session()
 
-def _cache_path(key: str) -> str:
-    h = hashlib.sha1(key.encode("utf-8")).hexdigest()
-    return os.path.join(CACHE_DIR, f"{h}.parquet")
+# Enhanced caching with TTL
+def cache_key(prefix: str, **kwargs) -> str:
+    """Generate cache key from prefix and parameters."""
+    key_str = f"{prefix}::" + "::".join(f"{k}={v}" for k, v in sorted(kwargs.items()))
+    return hashlib.sha256(key_str.encode()).hexdigest()
 
-def cache_df(key: str, df: pd.DataFrame):
+def save_cache(key: str, data: pd.DataFrame):
+    """Save DataFrame to cache with timestamp."""
+    cache_path = os.path.join(CACHE_DIR, f"{key}.parquet")
+    meta_path = os.path.join(CACHE_DIR, f"{key}.meta.json")
+    
     try:
-        path = _cache_path(key)
-        df.to_parquet(path)
-    except Exception:
-        pass
+        data.to_parquet(cache_path)
+        with open(meta_path, 'w') as f:
+            json.dump({"timestamp": time.time()}, f)
+    except Exception as e:
+        logger.error(f"Cache save error: {e}")
 
-def load_cache_df(key: str) -> Optional[pd.DataFrame]:
+def load_cache(key: str) -> Optional[pd.DataFrame]:
+    """Load DataFrame from cache if not expired."""
+    cache_path = os.path.join(CACHE_DIR, f"{key}.parquet")
+    meta_path = os.path.join(CACHE_DIR, f"{key}.meta.json")
+    
     try:
-        path = _cache_path(key)
-        if os.path.exists(path):
-            return pd.read_parquet(path)
-    except Exception:
-        return None
+        if os.path.exists(cache_path) and os.path.exists(meta_path):
+            with open(meta_path, 'r') as f:
+                meta = json.load(f)
+            
+            if time.time() - meta["timestamp"] < CACHE_TTL:
+                return pd.read_parquet(cache_path)
+    except Exception as e:
+        logger.error(f"Cache load error: {e}")
+    
     return None
 
+# Mount static files and templates
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-# Supported indicators (World Bank codes) mapped to friendly names and SDG
-SUPPORTED_INDICATORS: Dict[str, Dict[str, str]] = {
-    # Education (SDG 4)
-    "SE.PRM.NENR": {"name": "Primary school net enrollment rate (% of primary school age children)", "sdg": "SDG 4"},
-    "SE.SEC.NENR": {"name": "Secondary school net enrollment rate (% of secondary school age population)", "sdg": "SDG 4"},
-    "SE.ADT.LITR.ZS": {"name": "Adult literacy rate, population 15+ years, both sexes (%)", "sdg": "SDG 4"},
-    # Poverty (SDG 1)
-    "SI.POV.DDAY": {"name": "Poverty headcount ratio at $2.15 a day (2017 PPP) (% of population)", "sdg": "SDG 1"},
-    # Climate (SDG 13)
-    "EN.ATM.CO2E.PC": {"name": "CO2 emissions (metric tons per capita)", "sdg": "SDG 13"},
-    "EN.ATM.CO2E.KT": {"name": "CO2 emissions (kt)", "sdg": "SDG 13"},
-    "EN.ATM.PM25.MC.M3": {"name": "PM2.5 air pollution, mean annual exposure (micrograms per cubic meter)", "sdg": "SDG 3/13"},
-    # Health (SDG 3)
-    "SH.DYN.MORT": {"name": "Mortality rate, under-5 (per 1,000 live births)", "sdg": "SDG 3"},
+# Extended indicator registry with more SDGs
+INDICATORS = {
+    # SDG 1: No Poverty
+    "SI.POV.DDAY": {"name": "Poverty headcount ratio at $2.15 a day", "sdg": "SDG 1", "unit": "%", "target": 0.0, "direction": "<="},
+    "SI.POV.NAHC": {"name": "Poverty headcount ratio at national poverty lines", "sdg": "SDG 1", "unit": "%", "target": 0.0, "direction": "<="},
+    
+    # SDG 2: Zero Hunger
+    "SN.ITK.DEFC.ZS": {"name": "Prevalence of undernourishment", "sdg": "SDG 2", "unit": "%", "target": 0.0, "direction": "<="},
+    
+    # SDG 3: Good Health
+    "SH.DYN.MORT": {"name": "Under-5 mortality rate", "sdg": "SDG 3", "unit": "per 1,000", "target": 25.0, "direction": "<="},
+    "SH.STA.MMRT": {"name": "Maternal mortality ratio", "sdg": "SDG 3", "unit": "per 100,000", "target": 70.0, "direction": "<="},
+    
+    # SDG 4: Quality Education  
+    "SE.PRM.NENR": {"name": "Primary school enrollment", "sdg": "SDG 4", "unit": "%", "target": 100.0, "direction": ">="},
+    "SE.SEC.NENR": {"name": "Secondary school enrollment", "sdg": "SDG 4", "unit": "%", "target": 100.0, "direction": ">="},
+    "SE.ADT.LITR.ZS": {"name": "Adult literacy rate", "sdg": "SDG 4", "unit": "%", "target": 100.0, "direction": ">="},
+    
+    # SDG 5: Gender Equality
+    "SG.GEN.PARL.ZS": {"name": "Women in parliament", "sdg": "SDG 5", "unit": "%", "target": 50.0, "direction": ">="},
+    
+    # SDG 6: Clean Water
+    "SH.H2O.BASW.ZS": {"name": "Access to basic drinking water", "sdg": "SDG 6", "unit": "%", "target": 100.0, "direction": ">="},
+    
+    # SDG 7: Clean Energy
+    "EG.ELC.ACCS.ZS": {"name": "Access to electricity", "sdg": "SDG 7", "unit": "%", "target": 100.0, "direction": ">="},
+    "EG.FEC.RNEW.ZS": {"name": "Renewable energy consumption", "sdg": "SDG 7", "unit": "%", "target": 50.0, "direction": ">="},
+    
+    # SDG 8: Economic Growth
+    "NY.GDP.PCAP.KD.ZG": {"name": "GDP per capita growth", "sdg": "SDG 8", "unit": "%", "target": 3.0, "direction": ">="},
+    "SL.UEM.TOTL.ZS": {"name": "Unemployment rate", "sdg": "SDG 8", "unit": "%", "target": 5.0, "direction": "<="},
+    
+    # SDG 13: Climate Action
+    "EN.ATM.CO2E.PC": {"name": "CO2 emissions per capita", "sdg": "SDG 13", "unit": "tons", "target": 2.0, "direction": "<="},
+    "EN.ATM.PM25.MC.M3": {"name": "PM2.5 air pollution", "sdg": "SDG 13", "unit": "µg/m³", "target": 10.0, "direction": "<="},
 }
 
-# Simple goal registry for achievement scoring
-GOAL_REGISTRY: Dict[str, Dict[str, Any]] = {
-    # 100% enrollment and literacy desired
-    "SE.PRM.NENR": {"target": 100.0, "direction": ">=", "unit": "%"},
-    "SE.SEC.NENR": {"target": 100.0, "direction": ">=", "unit": "%"},
-    "SE.ADT.LITR.ZS": {"target": 100.0, "direction": ">=", "unit": "%"},
-    # Poverty target is 0%
-    "SI.POV.DDAY": {"target": 0.0, "direction": "<=", "unit": "%"},
-    # Emissions ideally reduced (no global fixed target here) – we measure reduction vs first year
-    "EN.ATM.CO2E.PC": {"target": 0.0, "direction": "<=", "unit": "t/capita"},
-    "EN.ATM.CO2E.KT": {"target": 0.0, "direction": "<=", "unit": "kt"},
-    "EN.ATM.PM25.MC.M3": {"target": 5.0, "direction": "<=", "unit": "µg/m³"},  # WHO guideline ~5
-    "SH.DYN.MORT": {"target": 25.0, "direction": "<=", "unit": "per 1,000"},   # SDG 3.2 target example
+# Country list (subset for demo)
+COUNTRIES = {
+    "KR": "Korea, Rep.",
+    "US": "United States", 
+    "CN": "China",
+    "JP": "Japan",
+    "DE": "Germany",
+    "FR": "France",
+    "GB": "United Kingdom",
+    "IN": "India",
+    "BR": "Brazil",
+    "ZA": "South Africa",
+    "NG": "Nigeria",
+    "EG": "Egypt, Arab Rep.",
+    "AU": "Australia",
+    "CA": "Canada",
+    "MX": "Mexico",
+    "ID": "Indonesia",
+    "TR": "Turkey",
+    "SA": "Saudi Arabia",
+    "AR": "Argentina",
+    "RU": "Russian Federation"
 }
 
+# Data fetching functions with rate limiting and caching
+async def fetch_world_bank(country: str, indicator: str) -> pd.DataFrame:
+    """Fetch data from World Bank API with caching and rate limiting."""
+    cache_id = cache_key("wb", country=country, indicator=indicator)
+    cached = load_cache(cache_id)
+    if cached is not None:
+        return cached
+    
+    rate_limiters["world_bank"].wait_if_needed()
+    
+    url = f"https://api.worldbank.org/v2/country/{country}/indicator/{indicator}"
+    params = {"format": "json", "per_page": 1000}
+    
+    try:
+        response = session.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        if len(data) < 2 or not data[1]:
+            raise ValueError("No data available")
+        
+        records = []
+        for item in data[1]:
+            if item.get("value") is not None:
+                records.append({
+                    "year": int(item["date"]),
+                    "value": float(item["value"])
+                })
+        
+        if not records:
+            raise ValueError("No valid data points")
+        
+        df = pd.DataFrame(records).sort_values("year")
+        save_cache(cache_id, df)
+        return df
+        
+    except Exception as e:
+        logger.error(f"World Bank fetch error: {e}")
+        raise
 
-def _time_split(df: pd.DataFrame, target: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-    X = df.drop(columns=[target])
-    y = df[target]
-    test_size = max(1, int(len(df) * 0.2))
-    split_idx = len(df) - test_size
-    return X.iloc[:split_idx], X.iloc[split_idx:], y.iloc[:split_idx], y.iloc[split_idx:]
+async def fetch_owid(indicator: str, country: str) -> pd.DataFrame:
+    """Fetch data from Our World in Data."""
+    cache_id = cache_key("owid", indicator=indicator, country=country)
+    cached = load_cache(cache_id)
+    if cached is not None:
+        return cached
+    
+    rate_limiters["owid"].wait_if_needed()
+    
+    url = f"https://github.com/owid/owid-datasets/raw/master/datasets/{indicator}/{indicator}.csv"
+    
+    try:
+        response = session.get(url, timeout=30)
+        response.raise_for_status()
+        
+        df = pd.read_csv(io.StringIO(response.text))
+        df = df[df["Entity"] == country][["Year", "Value"]]
+        df.columns = ["year", "value"]
+        df = df.dropna().sort_values("year")
+        
+        if df.empty:
+            raise ValueError("No data for country")
+        
+        save_cache(cache_id, df)
+        return df
+        
+    except Exception as e:
+        logger.error(f"OWID fetch error: {e}")
+        raise
 
+async def fetch_oecd(dataset: str, country: str) -> pd.DataFrame:
+    """Fetch data from OECD API."""
+    cache_id = cache_key("oecd", dataset=dataset, country=country)
+    cached = load_cache(cache_id)
+    if cached is not None:
+        return cached
+    
+    rate_limiters["oecd"].wait_if_needed()
+    
+    url = f"https://stats.oecd.org/SDMX-JSON/data/{dataset}/{country}"
+    
+    try:
+        response = session.get(url, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        # Parse OECD JSON structure (simplified)
+        # Implementation would need proper SDMX-JSON parsing
+        
+        df = pd.DataFrame()  # Placeholder
+        save_cache(cache_id, df)
+        return df
+        
+    except Exception as e:
+        logger.error(f"OECD fetch error: {e}")
+        raise
 
-def _linear_model(X_train, y_train, X_test, y_test, X_future) -> Dict[str, Any]:
+# Batch ETL function
+async def batch_fetch_indicators(country: str, indicators: List[str]) -> Dict[str, pd.DataFrame]:
+    """Fetch multiple indicators in parallel with proper error handling."""
+    results = {}
+    tasks = []
+    
+    for indicator in indicators:
+        task = fetch_world_bank(country, indicator)
+        tasks.append((indicator, task))
+    
+    for indicator, task in tasks:
+        try:
+            df = await task
+            results[indicator] = df
+        except Exception as e:
+            logger.error(f"Failed to fetch {indicator}: {e}")
+            results[indicator] = None
+    
+    return results
+
+# Enhanced forecasting with confidence intervals
+def forecast_with_linear(data: pd.DataFrame, horizon: int = 5) -> Dict[str, Any]:
+    """Linear regression with prediction intervals."""
+    X = data[["year"]].values
+    y = data["value"].values
+    
     model = LinearRegression()
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test) if len(X_test) else []
-    r2 = r2_score(y_test, y_pred) if len(y_test) > 1 else None
-    # naive PI via residual std
-    resid_std = None
-    try:
-        in_pred = model.predict(X_train)
-        resid_std = float(pd.Series(y_train - in_pred).std())
-    except Exception:
-        pass
-    fut_pred = model.predict(X_future)
-    if resid_std is not None:
-        ci = 1.96 * resid_std
-        lower = (fut_pred - ci).tolist()
-        upper = (fut_pred + ci).tolist()
-    else:
-        lower = [None] * len(fut_pred)
-        upper = [None] * len(fut_pred)
-    return {"pred": fut_pred.tolist(), "r2": r2, "pi_low": lower, "pi_high": upper, "model": "linear"}
+    model.fit(X, y)
+    
+    # Calculate residual standard error
+    predictions = model.predict(X)
+    residuals = y - predictions
+    rse = np.sqrt(np.sum(residuals**2) / (len(y) - 2))
+    
+    # Future predictions
+    last_year = data["year"].max()
+    future_years = np.arange(last_year + 1, last_year + horizon + 1).reshape(-1, 1)
+    future_pred = model.predict(future_years)
+    
+    # 95% confidence interval
+    t_stat = 1.96  # approximation for large samples
+    se = rse * np.sqrt(1 + 1/len(y) + (future_years - X.mean())**2 / np.sum((X - X.mean())**2))
+    lower = future_pred - t_stat * se.flatten()
+    upper = future_pred + t_stat * se.flatten()
+    
+    # Calculate R²
+    r2 = r2_score(y, predictions)
+    
+    return {
+        "years": future_years.flatten().tolist(),
+        "predictions": future_pred.tolist(),
+        "lower_bound": lower.tolist(),
+        "upper_bound": upper.tolist(),
+        "r2": r2,
+        "model": "Linear Regression"
+    }
 
-
-def _arima_model(series: List[float], horizon: int) -> Dict[str, Any]:
+def forecast_with_arima(data: pd.DataFrame, horizon: int = 5) -> Dict[str, Any]:
+    """ARIMA forecasting with confidence intervals."""
     if not HAS_ARIMA:
-        return {"error": "ARIMA not available on server", "model": "arima"}
-    try:
-        model = pm.auto_arima(series, seasonal=False, error_action='ignore', suppress_warnings=True)
-        fc, conf = model.predict(n_periods=horizon, return_conf_int=True, alpha=0.05)
-        return {"pred": fc.tolist(), "pi_low": conf[:, 0].tolist(), "pi_high": conf[:, 1].tolist(), "model": "arima"}
-    except Exception as e:
-        return {"error": str(e), "model": "arima"}
-
-
-def _xgb_model(X_train, y_train, X_test, y_test, X_future) -> Dict[str, Any]:
-    if not HAS_XGB:
-        return {"error": "XGBoost not available on server", "model": "xgboost"}
-    try:
-        model = XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=3, subsample=0.8, colsample_bytree=0.8, random_state=42)
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test) if len(X_test) else []
-        r2 = r2_score(y_test, y_pred) if len(y_test) > 1 else None
-        # naive PI via residual std on train
-        resid_std = None
-        try:
-            in_pred = model.predict(X_train)
-            resid_std = float(pd.Series(y_train - in_pred).std())
-        except Exception:
-            pass
-        fut_pred = model.predict(X_future)
-        if resid_std is not None:
-            ci = 1.96 * resid_std
-            lower = (fut_pred - ci).tolist()
-            upper = (fut_pred + ci).tolist()
-        else:
-            lower = [None] * len(fut_pred)
-            upper = [None] * len(fut_pred)
-        return {"pred": fut_pred.tolist(), "r2": r2, "pi_low": lower, "pi_high": upper, "model": "xgboost"}
-    except Exception as e:
-        return {"error": str(e), "model": "xgboost"}
-
-
-def _achievement(latest_val: float, forecast_last: float, indicator: Optional[str], first_hist: Optional[float] = None) -> Dict[str, Any]:
-    meta = GOAL_REGISTRY.get(indicator or "", None)
-    if not meta:
-        return {"defined": False}
-    direction = meta["direction"]
-    target = float(meta["target"])
-    # progress function returns percent [0,100+]
-    def prog(current: float) -> Optional[float]:
-        if direction == ">=":
-            if target == 0:
-                return None
-            return max(0.0, min(100.0, 100.0 * current / target))
-        # <= direction
-        baseline = first_hist if first_hist is not None else None
-        if target == 0.0:
-            if baseline in (None, 0):
-                return None
-            # 100% when current==0, 0% when current==baseline
-            return max(0.0, min(100.0, 100.0 * (baseline - current) / baseline))
-        else:
-            # target > 0
-            if baseline is None:
-                return None
-            total_gap = max(1e-9, baseline - target)
-            return max(0.0, min(100.0, 100.0 * (baseline - current) / total_gap))
-    return {
-        "defined": True,
-        "target": target,
-        "direction": direction,
-        "latest_progress_pct": prog(latest_val),
-        "forecast_progress_pct": prog(forecast_last),
-        "unit": meta.get("unit"),
-    }
-
-
-def _prepare_features(df: pd.DataFrame, target_column: str) -> pd.DataFrame:
-    # keep numeric columns, fill forward then drop remaining NaNs
-    num_df = df.select_dtypes(include=["number"]).copy()
-    num_df = num_df.sort_values("year")
-    num_df = num_df.ffill().bfill()
-    # ensure target exists
-    if target_column not in num_df.columns:
-        raise ValueError(f"Target column '{target_column}' not numeric or not present.")
-    return num_df
-
-
-def _train_and_forecast(df: pd.DataFrame, horizon: int, target_column: str = "value", model: str = "linear", indicator: Optional[str] = None) -> Dict[str, Any]:
-    if "year" not in df.columns:
-        return {"error": "Data must include a 'year' column."}
-    df = df.dropna(subset=["year"]).copy()
-    df["year"] = df["year"].astype(int)
-    df = df.sort_values("year")
-    if target_column not in df.columns:
-        return {"error": f"Target column '{target_column}' not in data. Columns: {list(df.columns)}"}
-    if len(df) < 3:
-        return {"error": "Not enough data points to train a model (need >= 3)."}
-
-    num_df = _prepare_features(df, target_column)
-    # If only 1 feature (target), add year as feature to allow trend
-    features = [c for c in num_df.columns if c not in (target_column, "year")]
-    if features == []:
-        # ensure year exists as a feature
-        if "year" not in num_df.columns:
-            num_df = pd.concat([num_df, df[["year"]]], axis=1)
-        features = ["year"]
-    # Build train/test split with time order (avoid duplicate year column)
-    cols = ["year"] + features + [target_column]
-    # remove duplicates while preserving order
-    seen = set()
-    cols = [x for x in cols if not (x in seen or seen.add(x))]
-    full = num_df[cols].drop_duplicates("year").sort_values("year")
-    if len(full) < 3:
-        return {"error": "Insufficient unique yearly data."}
-
-    X = full[features]
-    y = full[target_column]
-    test_size = max(1, int(len(full) * 0.2))
-    split_idx = len(full) - test_size
-    X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
-    y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
-
-    last_year = int(full["year"].max())
+        raise ValueError("ARIMA not available")
+    
+    values = data["value"].values
+    
+    # Auto ARIMA
+    model = pm.auto_arima(values, seasonal=False, stepwise=True, suppress_warnings=True)
+    
+    # Forecast
+    forecast, conf_int = model.predict(n_periods=horizon, return_conf_int=True, alpha=0.05)
+    
+    last_year = data["year"].max()
     future_years = list(range(last_year + 1, last_year + horizon + 1))
-    # For features that are not 'year', keep them constant by last known value (simple baseline)
-    future_feat = {}
-    for f in features:
-        if f == "year":
-            future_feat[f] = future_years
-        else:
-            future_feat[f] = [float(full[f].iloc[-1])] * len(future_years)
-    X_future = pd.DataFrame(future_feat)
-
-    result: Dict[str, Any]
-    if model == "linear":
-        out = _linear_model(X_train, y_train, X_test, y_test, X_future)
-        result = out
-    elif model == "arima":
-        # use target series only, ignore features
-        out = _arima_model(full[target_column].tolist(), horizon)
-        if "error" in out:
-            return {"error": out["error"], "model": "arima"}
-        result = {"pred": out["pred"], "r2": None, "pi_low": out["pi_low"], "pi_high": out["pi_high"], "model": "arima"}
-    elif model == "xgboost":
-        out = _xgb_model(X_train, y_train, X_test, y_test, X_future)
-        if "error" in out:
-            return out
-        result = out
-    else:
-        return {"error": f"Unknown model '{model}'", "model": model}
-
-    hist_years = full["year"].tolist()
-    hist_vals = full[target_column].tolist()
-
-    achievement = _achievement(latest_val=hist_vals[-1], forecast_last=float(result["pred"][-1]), indicator=indicator, first_hist=hist_vals[0])
-
+    
     return {
-        "historical": {"year": hist_years, target_column: hist_vals},
-        "metrics": {"r2": result.get("r2"), "model": result.get("model")},
-        "forecast": {"year": future_years, "pred": result["pred"], "pi_low": result.get("pi_low"), "pi_high": result.get("pi_high")},
-        "achievement": achievement,
+        "years": future_years,
+        "predictions": forecast.tolist(),
+        "lower_bound": conf_int[:, 0].tolist(),
+        "upper_bound": conf_int[:, 1].tolist(),
+        "model": "ARIMA"
     }
 
+def forecast_with_xgboost(data: pd.DataFrame, horizon: int = 5) -> Dict[str, Any]:
+    """XGBoost forecasting with confidence intervals."""
+    if not HAS_XGB:
+        raise ValueError("XGBoost not available")
+    
+    # Feature engineering
+    data = data.copy()
+    data["year_normalized"] = (data["year"] - data["year"].min()) / (data["year"].max() - data["year"].min())
+    data["trend"] = np.arange(len(data))
+    
+    X = data[["year_normalized", "trend"]].values
+    y = data["value"].values
+    
+    # Train model
+    model = XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
+    model.fit(X, y)
+    
+    # Predictions on training data for residuals
+    train_pred = model.predict(X)
+    residuals = y - train_pred
+    rse = np.std(residuals)
+    
+    # Future predictions
+    last_year = data["year"].max()
+    future_years = np.arange(last_year + 1, last_year + horizon + 1)
+    
+    year_min = data["year"].min()
+    year_range = data["year"].max() - year_min
+    future_normalized = (future_years - year_min) / year_range
+    future_trend = np.arange(len(data), len(data) + horizon)
+    
+    X_future = np.column_stack([future_normalized, future_trend])
+    future_pred = model.predict(X_future)
+    
+    # Confidence intervals (approximate)
+    t_stat = 1.96
+    lower = future_pred - t_stat * rse
+    upper = future_pred + t_stat * rse
+    
+    # R² score
+    r2 = r2_score(y, train_pred)
+    
+    return {
+        "years": future_years.tolist(),
+        "predictions": future_pred.tolist(),
+        "lower_bound": lower.tolist(),
+        "upper_bound": upper.tolist(),
+        "r2": r2,
+        "model": "XGBoost"
+    }
 
-@lru_cache(maxsize=256)
-@rate_limited
-def fetch_world_bank_series(country: str, indicator: str, per_page: int = 20000) -> pd.DataFrame:
-    url = f"https://api.worldbank.org/v2/country/{country}/indicator/{indicator}?format=json&per_page={per_page}"
-    ck = f"wb::{country}::{indicator}"
-    cached = load_cache_df(ck)
-    if cached is not None and not cached.empty:
-        return cached
-    resp = rl_get(url, timeout=30)
-    if resp.status_code != 200:
-        raise RuntimeError(f"World Bank API request failed with status {resp.status_code}")
-    data = resp.json()
-    if not isinstance(data, list) or len(data) < 2:
-        raise RuntimeError("Unexpected World Bank API response format")
-    series = data[1] or []
-    rows: List[Dict[str, Any]] = []
-    for item in series:
-        year = item.get("date")
-        value = item.get("value")
-        if year is None:
-            continue
-        try:
-            y = int(year)
-        except Exception:
-            continue
-        rows.append({"year": y, indicator: value})
-    df = pd.DataFrame(rows).dropna()
-    if df.empty:
-        raise RuntimeError("No valid data points returned from World Bank.")
-    df = df.sort_values("year")
-    cache_df(ck, df)
-    return df
+# Calculate achievement percentage
+def calculate_achievement(current: float, target: float, direction: str, initial: float = None) -> float:
+    """Calculate achievement percentage towards SDG target."""
+    if direction == ">=":
+        # Higher is better
+        if target == 0:
+            return 100.0 if current > 0 else 0.0
+        return min(100.0, (current / target) * 100)
+    else:
+        # Lower is better
+        if initial is None:
+            initial = current * 2  # Rough estimate
+        
+        if target >= initial:
+            return 100.0
+        
+        progress = (initial - current) / (initial - target)
+        return max(0.0, min(100.0, progress * 100))
 
-
-def fetch_world_bank_multi(country: str, indicators: List[str]) -> pd.DataFrame:
-    merged: Optional[pd.DataFrame] = None
-    for ind in indicators:
-        part = fetch_world_bank_series(country=country, indicator=ind)
-        merged = part if merged is None else pd.merge(merged, part, on="year", how="outer")
-    if merged is None or merged.empty:
-        raise RuntimeError("No data merged from World Bank.")
-    merged = merged.sort_values("year").dropna(how="all")
-    return merged
-
-
-def fetch_owid_series(indicator: str, country_code: str) -> pd.DataFrame:
-    """Fetch a series from Our World in Data Grapher CSV (columns: Entity, Code, Year, Value)."""
-    url = f"https://ourworldindata.org/grapher/{indicator}.csv"
-    ck = f"owid::{indicator}::{country_code}"
-    cached = load_cache_df(ck)
-    if cached is not None and not cached.empty:
-        return cached
-    resp = rl_get(url, timeout=30)
-    if resp.status_code != 200:
-        raise RuntimeError(f"OWID fetch failed ({resp.status_code})")
-    df = pd.read_csv(io.BytesIO(resp.content))
-    if not set(["Code","Year","Value"]).issubset(df.columns):
-        raise RuntimeError("Unexpected OWID CSV format")
-    df = df[df["Code"] == country_code]
-    df = df.rename(columns={"Year":"year","Value":"value"})[["year","value"]].dropna()
-    df = df.sort_values("year")
-    if df.empty:
-        raise RuntimeError("No OWID data for specified country/indicator")
-    cache_df(ck, df)
-    return df
-
-
-def fetch_oecd_series(dataset: str, key: str) -> pd.DataFrame:
-    """Fetch a series from OECD SDMX-JSON CSV output; expects TIME_PERIOD and Value columns."""
-    url = f"https://stats.oecd.org/sdmx-json/data/{dataset}/{key}?contentType=csv"
-    ck = f"oecd::{dataset}::{key}"
-    cached = load_cache_df(ck)
-    if cached is not None and not cached.empty:
-        return cached
-    resp = rl_get(url, timeout=30)
-    if resp.status_code != 200:
-        raise RuntimeError(f"OECD fetch failed ({resp.status_code})")
-    df = pd.read_csv(io.BytesIO(resp.content))
-    if not set(["TIME_PERIOD","Value"]).issubset(df.columns):
-        raise RuntimeError("Unexpected OECD CSV format; please adjust dataset/key")
-    def parse_year(x):
-        try:
-            return int(str(x)[:4])
-        except Exception:
-            return None
-    df["year"] = df["TIME_PERIOD"].apply(parse_year)
-    df = df.dropna(subset=["year","Value"]).copy()
-    df["year"] = df["year"].astype(int)
-    df = df.rename(columns={"Value":"value"})[["year","value"]].sort_values("year")
-    if df.empty:
-        raise RuntimeError("No OECD data after parsing")
-    cache_df(ck, df)
-    return df
-
-
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
-
-@app.get("/api/indicators")
-async def list_indicators():
-    caps = {"arima": HAS_ARIMA, "xgboost": HAS_XGB, "linear": True}
-    return {"indicators": [{"code": k, **v} for k, v in SUPPORTED_INDICATORS.items()], "capabilities": caps}
-
-
-@app.get("/api/fetch_wb")
-async def api_fetch_wb(country: str, indicator: str):
-    try:
-        df = fetch_world_bank_series(country=country, indicator=indicator)
-        return {"year": df["year"].tolist(), "value": df[indicator].tolist()}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@app.get("/predict_wb")
-async def predict_wb(country: str, indicators: str, horizon: int = 5, model: str = "linear", target_indicator: Optional[str] = None):
-    """Fetch one or multiple WB indicators (comma-separated) and forecast target.
-    If multiple indicators are provided and target_indicator omitted, the first is used as target; others become features.
-    """
-    try:
-        codes = [c.strip() for c in indicators.split(',') if c.strip()]
-        if not codes:
-            return {"error": "No indicator codes provided."}
-        df = fetch_world_bank_multi(country=country, indicators=codes)
-        tgt = target_indicator or codes[0]
-        if tgt not in df.columns:
-            return {"error": f"Target indicator '{tgt}' not present in merged data."}
-        result = _train_and_forecast(df, horizon=horizon, target_column=tgt, model=model, indicator=tgt)
-        result["meta"] = {
-            "country": country,
-            "indicators": codes,
-            "target_indicator": tgt,
-            "indicator_name": SUPPORTED_INDICATORS.get(tgt, {}).get("name"),
-            "sdg": SUPPORTED_INDICATORS.get(tgt, {}).get("sdg"),
+# API Endpoints
+@app.get("/")
+async def home(request: Request, lang: str = Query(default="en")):
+    """Render home page with selected language."""
+    return templates.TemplateResponse("index_enhanced.html", {
+        "request": request,
+        "lang": lang,
+        "translations": TRANSLATIONS[lang] if lang in TRANSLATIONS else TRANSLATIONS["en"],
+        "countries": COUNTRIES,
+        "indicators": INDICATORS,
+        "models": {
+            "linear": "Linear Regression",
+            "arima": "ARIMA (Auto)" if HAS_ARIMA else "ARIMA (Not Available)",
+            "xgboost": "XGBoost" if HAS_XGB else "XGBoost (Not Available)"
+        },
+        "languages": {
+            "en": "English",
+            "ko": "한국어",
+            "fr": "Français",
+            "zh": "中文",
+            "ja": "日本語"
         }
-        return result
-    except Exception as e:
-        return {"error": str(e)}
+    })
 
+@app.get("/api/capabilities")
+async def get_capabilities():
+    """Get system capabilities."""
+    return {
+        "models": {
+            "linear": True,
+            "arima": HAS_ARIMA,
+            "xgboost": HAS_XGB
+        },
+        "data_sources": ["world_bank", "owid", "oecd"],
+        "cache_ttl": CACHE_TTL,
+        "rate_limits": RATE_LIMITS
+    }
 
-@app.get("/predict_owid")
-async def predict_owid(indicator: str, country: str, horizon: int = 5, model: str = "linear"):
+@app.post("/api/analyze")
+async def analyze(
+    country: str = Form(...),
+    indicators: List[str] = Form(...),
+    model: str = Form("linear"),
+    horizon: int = Form(5),
+    lang: str = Form("en")
+):
+    """Analyze multiple indicators with forecasting."""
     try:
-        df = fetch_owid_series(indicator=indicator, country_code=country)
-        result = _train_and_forecast(df, horizon=horizon, target_column="value", model=model, indicator=indicator)
-        result["meta"] = {"source": "OWID", "indicator": indicator, "country": country}
-        return result
+        # Fetch all indicators
+        data_dict = await batch_fetch_indicators(country, indicators)
+        
+        results = []
+        for indicator, data in data_dict.items():
+            if data is None or data.empty:
+                results.append({
+                    "indicator": indicator,
+                    "error": "No data available"
+                })
+                continue
+            
+            # Get indicator metadata
+            meta = INDICATORS.get(indicator, {})
+            
+            # Perform forecasting
+            try:
+                if model == "linear":
+                    forecast = forecast_with_linear(data, horizon)
+                elif model == "arima":
+                    forecast = forecast_with_arima(data, horizon)
+                elif model == "xgboost":
+                    forecast = forecast_with_xgboost(data, horizon)
+                else:
+                    raise ValueError(f"Unknown model: {model}")
+            except Exception as e:
+                results.append({
+                    "indicator": indicator,
+                    "error": str(e)
+                })
+                continue
+            
+            # Calculate achievement
+            current_value = data["value"].iloc[-1]
+            predicted_value = forecast["predictions"][-1]
+            initial_value = data["value"].iloc[0] if len(data) > 0 else None
+            
+            achievement_current = calculate_achievement(
+                current_value,
+                meta.get("target", 0),
+                meta.get("direction", ">="),
+                initial_value
+            )
+            
+            achievement_predicted = calculate_achievement(
+                predicted_value,
+                meta.get("target", 0),
+                meta.get("direction", ">="),
+                initial_value
+            )
+            
+            results.append({
+                "indicator": indicator,
+                "name": meta.get("name", indicator),
+                "sdg": meta.get("sdg", ""),
+                "unit": meta.get("unit", ""),
+                "target": meta.get("target", None),
+                "historical": {
+                    "years": data["year"].tolist(),
+                    "values": data["value"].tolist()
+                },
+                "forecast": forecast,
+                "achievement": {
+                    "current": achievement_current,
+                    "predicted": achievement_predicted,
+                    "target": meta.get("target", None),
+                    "direction": meta.get("direction", ">=")
+                }
+            })
+        
+        return {
+            "success": True,
+            "country": COUNTRIES.get(country, country),
+            "results": results
+        }
+        
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"Analysis error: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-
-@app.get("/predict_oecd")
-async def predict_oecd(dataset: str, key: str, horizon: int = 5, model: str = "linear"):
+@app.post("/api/upload")
+async def upload_custom_data(
+    file: UploadFile = File(...),
+    model: str = Form("linear"),
+    horizon: int = Form(5)
+):
+    """Upload and analyze custom CSV data."""
     try:
-        df = fetch_oecd_series(dataset=dataset, key=key)
-        result = _train_and_forecast(df, horizon=horizon, target_column="value", model=model, indicator=dataset)
-        result["meta"] = {"source": "OECD", "dataset": dataset, "key": key}
-        return result
+        content = await file.read()
+        df = pd.read_csv(io.BytesIO(content))
+        
+        # Validate columns
+        if "year" not in df.columns or "value" not in df.columns:
+            raise ValueError("CSV must contain 'year' and 'value' columns")
+        
+        df = df[["year", "value"]].dropna().sort_values("year")
+        
+        # Perform forecasting
+        if model == "linear":
+            forecast = forecast_with_linear(df, horizon)
+        elif model == "arima":
+            forecast = forecast_with_arima(df, horizon)
+        elif model == "xgboost":
+            forecast = forecast_with_xgboost(df, horizon)
+        else:
+            raise ValueError(f"Unknown model: {model}")
+        
+        return {
+            "success": True,
+            "historical": {
+                "years": df["year"].tolist(),
+                "values": df["value"].tolist()
+            },
+            "forecast": forecast
+        }
+        
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"Upload error: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
+@app.get("/api/export/{format}")
+async def export_results(
+    format: str,
+    country: str = Query(...),
+    indicators: str = Query(...),
+    model: str = Query("linear"),
+    horizon: int = Query(5)
+):
+    """Export analysis results in various formats."""
+    # Implementation for CSV/JSON/Excel export
+    pass
 
-@app.post("/predict")
-async def predict(file: UploadFile = File(...),
-                  horizon: int = Form(5),
-                  target_column: str = Form("value"),
-                  model: str = Form("linear")):
-    content = await file.read()
-    df = pd.read_csv(io.BytesIO(content))
-    result = _train_and_forecast(df, horizon=horizon, target_column=target_column, model=model)
-    return result
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
