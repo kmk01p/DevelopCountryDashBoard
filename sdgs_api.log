@@ -17,3 +17,6 @@ INFO:     10.12.238.228:54166 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NE
 INFO:     127.0.0.1:43444 - "GET / HTTP/1.1" 500 Internal Server Error
 INFO:     10.12.238.228:48454 - "GET / HTTP/1.1" 500 Internal Server Error
 INFO:     127.0.0.1:38458 - "GET / HTTP/1.1" 200 OK
+INFO:     10.12.238.228:57222 - "GET / HTTP/1.1" 200 OK
+INFO:     10.12.238.228:57926 - "POST /api/analyze HTTP/1.1" 200 OK
+INFO:     10.12.238.228:57932 - "POST /api/analyze HTTP/1.1" 200 OK
