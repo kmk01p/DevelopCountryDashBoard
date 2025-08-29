@@ -48,6 +48,7 @@
         <div class="field">
           <div class="control">
             <button class="button is-primary" type="submit">예측 실행</button>
+            <a class="button is-light" href="/static/examples.zip" download>예시 CSV 다운로드</a>
           </div>
         </div>
       </form>
@@ -104,6 +105,15 @@
 
     <div class="box">
       <canvas id="chart"></canvas>
+    </div>
+
+    <div class="content is-small">
+      <p>서버에 저장된 예시 파일들:</p>
+      <ul>
+        <li><code>app/data/examples/example_education_kor.csv</code></li>
+        <li><code>app/data/examples/example_climate_usa.csv</code></li>
+        <li><code>app/data/examples/example_poverty_ind.csv</code></li>
+      </ul>
     </div>
   </div>
 
