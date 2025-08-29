@@ -17,108 +17,129 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
             min-height: 100vh;
-            padding: 20px;
+            color: #2c3e50;
         }
         
         .language-selector {
-            position: fixed;
+            position: absolute;
             top: 20px;
             right: 20px;
             z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         
         .language-selector select {
-            padding: 5px 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
             font-size: 14px;
+            background: white;
+            color: #374151;
             cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        
+        .language-selector select:hover {
+            border-color: #9ca3af;
         }
         
         .container {
             max-width: 1400px;
             margin: 0 auto;
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
+            min-height: 100vh;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
             color: white;
-            padding: 40px;
-            text-align: center;
+            padding: 30px 40px;
+            position: relative;
         }
         
         .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
         }
         
         .header p {
-            font-size: 1.2em;
-            opacity: 0.95;
+            font-size: 15px;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+        
+        .un-badge {
+            position: absolute;
+            right: 100px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .un-badge img {
+            height: 30px;
+        }
+        
+        .un-badge span {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.9;
         }
         
         .description-box {
-            background: #f8f9fa;
-            padding: 30px;
-            margin: 20px;
-            border-radius: 15px;
-            border-left: 5px solid #667eea;
+            background: #f8fafc;
+            padding: 25px 40px;
+            border-bottom: 1px solid #e5e7eb;
         }
         
         .description-box h3 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 1.5em;
-        }
-        
-        .description-box h4 {
-            color: #555;
-            margin-top: 20px;
-            margin-bottom: 10px;
+            color: #1f2937;
+            margin-bottom: 12px;
+            font-size: 18px;
+            font-weight: 600;
         }
         
         .description-box p {
-            color: #666;
-            line-height: 1.8;
-            margin-bottom: 15px;
+            color: #4b5563;
+            line-height: 1.6;
+            font-size: 14px;
+            margin-bottom: 12px;
         }
         
         .description-box ul {
             margin-left: 20px;
-            color: #666;
-            line-height: 1.8;
+            color: #4b5563;
+            line-height: 1.6;
+            font-size: 14px;
         }
         
         .description-box li {
-            margin-bottom: 8px;
-        }
-        
-        .description-box strong {
-            color: #444;
+            margin-bottom: 6px;
         }
         
         .controls {
-            padding: 30px;
-            background: #fff;
+            padding: 30px 40px;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
         }
         
         .control-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
         
         .control-group {
@@ -127,29 +148,30 @@
         }
         
         .control-group label {
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-            font-size: 14px;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #374151;
+            font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
         
         .control-group select,
         .control-group input {
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 15px;
-            transition: all 0.3s;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: all 0.2s;
             background: white;
+            color: #1f2937;
         }
         
         .control-group select:focus,
         .control-group input:focus {
-            border-color: #667eea;
+            border-color: #2563eb;
             outline: none;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
         
         .select2-container {
@@ -157,60 +179,134 @@
         }
         
         .select2-container--default .select2-selection--multiple {
-            min-height: 42px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
+            min-height: 40px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
         }
         
         .button-group {
             display: flex;
             gap: 10px;
-            justify-content: center;
             margin-top: 20px;
         }
         
         .btn {
-            padding: 12px 30px;
+            padding: 10px 20px;
             border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
         
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #2563eb;
             color: white;
         }
         
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            background: #1d4ed8;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
         }
         
         .btn-secondary {
-            background: #6c757d;
+            background: #6b7280;
             color: white;
         }
         
         .btn-secondary:hover {
-            background: #5a6268;
+            background: #4b5563;
+        }
+        
+        .btn-outline {
+            background: white;
+            color: #2563eb;
+            border: 1px solid #2563eb;
+        }
+        
+        .btn-outline:hover {
+            background: #eff6ff;
+        }
+        
+        .upload-section {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .upload-section h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 15px;
+        }
+        
+        .upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            background: #f9fafb;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #9ca3af;
+            background: #f3f4f6;
+        }
+        
+        .upload-area.dragover {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #9ca3af;
+            margin-bottom: 10px;
+        }
+        
+        .upload-text {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .btn-upload {
+            background: #f3f4f6;
+            color: #374151;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid #d1d5db;
+            transition: all 0.2s;
+        }
+        
+        .btn-upload:hover {
+            background: #e5e7eb;
         }
         
         .results {
-            padding: 30px;
-            background: #f8f9fa;
+            padding: 30px 40px;
+            background: #f9fafb;
+            min-height: 400px;
         }
         
         .result-card {
             background: white;
-            border-radius: 15px;
+            border-radius: 8px;
             padding: 25px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
         }
         
         .result-header {
@@ -219,28 +315,32 @@
             align-items: center;
             margin-bottom: 20px;
             padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 1px solid #e5e7eb;
         }
         
         .result-title {
-            font-size: 1.3em;
+            font-size: 18px;
             font-weight: 600;
-            color: #333;
+            color: #1f2937;
         }
         
         .sdg-badge {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            font-weight: 600;
+            background: #eff6ff;
+            color: #1e40af;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            border: 1px solid #dbeafe;
         }
         
         .chart-container {
             position: relative;
             height: 400px;
             margin-bottom: 20px;
+            padding: 10px;
+            background: #fafbfc;
+            border-radius: 4px;
         }
         
         .metrics-grid {
@@ -251,63 +351,72 @@
         }
         
         .metric-card {
-            background: #f8f9fa;
+            background: #f8fafc;
             padding: 15px;
-            border-radius: 10px;
-            text-align: center;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
         }
         
         .metric-label {
-            font-size: 0.9em;
-            color: #666;
+            font-size: 11px;
+            color: #6b7280;
             margin-bottom: 5px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            font-weight: 500;
         }
         
         .metric-value {
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #333;
+            font-size: 24px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .metric-unit {
+            font-size: 12px;
+            color: #6b7280;
+            margin-left: 4px;
         }
         
         .achievement-badge {
             display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 1.1em;
-            margin: 5px;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 500;
+            font-size: 13px;
         }
         
         .achievement-high {
-            background: linear-gradient(135deg, #00b09b, #96c93d);
-            color: white;
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
         }
         
         .achievement-medium {
-            background: linear-gradient(135deg, #ffa726, #fb8c00);
-            color: white;
+            background: #fed7aa;
+            color: #92400e;
+            border: 1px solid #fdba74;
         }
         
         .achievement-low {
-            background: linear-gradient(135deg, #ef5350, #e91e63);
-            color: white;
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
         }
         
         .loading {
             text-align: center;
-            padding: 40px;
+            padding: 60px;
         }
         
         .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
+            border: 3px solid #e5e7eb;
+            border-top: 3px solid #2563eb;
             border-radius: 50%;
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto;
+            margin: 0 auto 20px;
         }
         
         @keyframes spin {
@@ -316,21 +425,32 @@
         }
         
         .error-message {
-            background: #fee;
-            color: #c33;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px;
-            border-left: 4px solid #c33;
+            background: #fef2f2;
+            color: #991b1b;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border: 1px solid #fecaca;
+            font-size: 14px;
         }
         
         .info-message {
-            background: #e3f2fd;
-            color: #1976d2;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px;
-            border-left: 4px solid #1976d2;
+            background: #eff6ff;
+            color: #1e40af;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border: 1px solid #dbeafe;
+            font-size: 14px;
+        }
+        
+        .footer {
+            background: #f9fafb;
+            padding: 20px 40px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            color: #6b7280;
+            font-size: 13px;
         }
         
         @media (max-width: 768px) {
@@ -339,11 +459,15 @@
             }
             
             .header h1 {
-                font-size: 1.8em;
+                font-size: 20px;
             }
             
             .metrics-grid {
                 grid-template-columns: 1fr;
+            }
+            
+            .un-badge {
+                display: none;
             }
         }
     </style>
@@ -363,10 +487,15 @@
         <div class="header">
             <h1>{{ translations.title }}</h1>
             <p>{{ translations.subtitle }}</p>
+            <div class="un-badge">
+                <span>UN SDGs</span>
+            </div>
         </div>
 
         <!-- Description -->
-        {{ translations.description|safe }}
+        <div class="description-box">
+            {{ translations.description|safe }}
+        </div>
 
         <!-- Controls -->
         <div class="controls">
@@ -393,9 +522,7 @@
                     <label for="model">{{ translations.select_model }}</label>
                     <select id="model" name="model">
                         {% for code, name in models.items() %}
-                        <option value="{{ code }}" {% if 'Not Available' in name %}disabled{% endif %}>
-                            {{ name }}
-                        </option>
+                        <option value="{{ code }}">{{ name }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -413,14 +540,34 @@
                 <button class="btn btn-secondary" onclick="exportResults()">
                     {{ translations.export_results }}
                 </button>
+                <button class="btn btn-outline" onclick="clearResults()">
+                    Clear
+                </button>
+            </div>
+
+            <!-- CSV Upload Section -->
+            <div class="upload-section">
+                <h3>{{ translations.upload_custom }}</h3>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Drag & drop CSV file here or click to browse</div>
+                    <input type="file" id="fileInput" class="file-input" accept=".csv">
+                    <label for="fileInput" class="btn-upload">Choose File</label>
+                </div>
+                <div id="fileInfo" style="margin-top: 10px; font-size: 13px; color: #6b7280;"></div>
             </div>
         </div>
 
         <!-- Results -->
         <div class="results" id="results">
             <div class="info-message">
-                {{ translations.select_indicators }}
+                Select indicators and click Analyze to begin
             </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            © 2024 Global SDGs Analytics Platform - Powered by AI & Open Data
         </div>
     </div>
 
@@ -428,13 +575,54 @@
         // Initialize Select2 for multi-select
         $(document).ready(function() {
             $('#indicators').select2({
-                placeholder: '{{ translations.select_indicators }}',
+                placeholder: 'Select indicators...',
                 allowClear: true
+            });
+            
+            // File upload handling
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
             });
         });
 
         // Store charts for cleanup
         let charts = [];
+        let uploadedFile = null;
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+                    uploadedFile = file;
+                    document.getElementById('fileInfo').innerHTML = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                } else {
+                    alert('Please select a CSV file');
+                }
+            }
+        }
 
         function changeLanguage(lang) {
             window.location.href = `/?lang=${lang}`;
@@ -446,13 +634,19 @@
             const model = document.getElementById('model').value;
             const horizon = document.getElementById('horizon').value;
             
+            // Check if CSV file is uploaded
+            if (uploadedFile) {
+                await analyzeCSV();
+                return;
+            }
+            
             if (!indicators || indicators.length === 0) {
-                alert('{{ translations.select_indicators }}');
+                alert('Please select at least one indicator');
                 return;
             }
             
             const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>{{ translations.loading }}</p></div>';
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading data...</p></div>';
             
             try {
                 const formData = new FormData();
@@ -472,11 +666,197 @@
                 if (data.success) {
                     displayResults(data);
                 } else {
-                    resultsDiv.innerHTML = `<div class="error-message">{{ translations.error }}: ${data.error}</div>`;
+                    resultsDiv.innerHTML = `<div class="error-message">Error: ${data.error}</div>`;
                 }
             } catch (error) {
-                resultsDiv.innerHTML = `<div class="error-message">{{ translations.error }}: ${error.message}</div>`;
+                resultsDiv.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
             }
+        }
+
+        async function analyzeCSV() {
+            if (!uploadedFile) {
+                alert('Please select a CSV file first');
+                return;
+            }
+            
+            const model = document.getElementById('model').value;
+            const horizon = document.getElementById('horizon').value;
+            const resultsDiv = document.getElementById('results');
+            
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Processing CSV file...</p></div>';
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', uploadedFile);
+                formData.append('model', model);
+                formData.append('horizon', horizon);
+                
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayCSVResults(data);
+                } else {
+                    resultsDiv.innerHTML = `<div class="error-message">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
+            }
+        }
+
+        function displayCSVResults(data) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            
+            // Clear existing charts
+            charts.forEach(chart => chart.destroy());
+            charts = [];
+            
+            const cardId = 'csv-result';
+            const chartId = 'csv-chart';
+            
+            resultsDiv.innerHTML = `
+                <div class="result-card" id="${cardId}">
+                    <div class="result-header">
+                        <div class="result-title">Custom Data Analysis</div>
+                        <div>
+                            <span class="sdg-badge">CSV Upload</span>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="${chartId}"></canvas>
+                    </div>
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Model</div>
+                            <div class="metric-value">${data.forecast.model || 'N/A'}</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Model Accuracy (R²)</div>
+                            <div class="metric-value">${data.forecast.r2 ? (data.forecast.r2 * 100).toFixed(1) + '%' : 'N/A'}</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Data Points</div>
+                            <div class="metric-value">${data.historical.years.length}</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Forecast Period</div>
+                            <div class="metric-value">${data.forecast.years.length} years</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Create chart
+            setTimeout(() => {
+                createCSVChart(chartId, data);
+            }, 100);
+        }
+
+        function createCSVChart(canvasId, data) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            // Combine historical and forecast data
+            const allYears = [...data.historical.years, ...data.forecast.years];
+            const historicalValues = [...data.historical.values, ...Array(data.forecast.years.length).fill(null)];
+            const forecastValues = [...Array(data.historical.years.length).fill(null), ...data.forecast.predictions];
+            const lowerBound = [...Array(data.historical.years.length).fill(null), ...data.forecast.lower_bound];
+            const upperBound = [...Array(data.historical.years.length).fill(null), ...data.forecast.upper_bound];
+            
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: allYears,
+                    datasets: [
+                        {
+                            label: 'Historical Data',
+                            data: historicalValues,
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#2563eb',
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Forecast',
+                            data: forecastValues,
+                            borderColor: '#dc2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.05)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 3,
+                            pointBackgroundColor: '#dc2626',
+                            tension: 0.1
+                        },
+                        {
+                            label: '95% Confidence Interval',
+                            data: upperBound,
+                            borderColor: 'rgba(220, 38, 38, 0.2)',
+                            backgroundColor: 'rgba(220, 38, 38, 0.05)',
+                            borderWidth: 1,
+                            borderDash: [2, 2],
+                            pointRadius: 0,
+                            fill: '+1'
+                        },
+                        {
+                            label: '',
+                            data: lowerBound,
+                            borderColor: 'rgba(220, 38, 38, 0.2)',
+                            backgroundColor: 'rgba(220, 38, 38, 0.05)',
+                            borderWidth: 1,
+                            borderDash: [2, 2],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                filter: function(item) {
+                                    return item.text !== '';
+                                }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Year'
+                            },
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            charts.push(chart);
         }
 
         function displayResults(data) {
@@ -508,12 +888,12 @@
                 let achievementText = '';
                 if (result.achievement.current >= 80) {
                     achievementClass = 'achievement-high';
-                    achievementText = '🎯 ' + Math.round(result.achievement.current) + '%';
+                    achievementText = Math.round(result.achievement.current) + '%';
                 } else if (result.achievement.current >= 50) {
                     achievementClass = 'achievement-medium';
-                    achievementText = '📊 ' + Math.round(result.achievement.current) + '%';
+                    achievementText = Math.round(result.achievement.current) + '%';
                 } else {
-                    achievementText = '⚠️ ' + Math.round(result.achievement.current) + '%';
+                    achievementText = Math.round(result.achievement.current) + '%';
                 }
                 
                 resultsDiv.innerHTML += `
@@ -530,20 +910,20 @@
                         </div>
                         <div class="metrics-grid">
                             <div class="metric-card">
-                                <div class="metric-label">{{ translations.current_progress }}</div>
-                                <div class="metric-value">${Math.round(result.achievement.current)}%</div>
+                                <div class="metric-label">Current Progress</div>
+                                <div class="metric-value">${Math.round(result.achievement.current)}<span class="metric-unit">%</span></div>
                             </div>
                             <div class="metric-card">
-                                <div class="metric-label">{{ translations.predicted_progress }}</div>
-                                <div class="metric-value">${Math.round(result.achievement.predicted)}%</div>
+                                <div class="metric-label">Predicted Progress</div>
+                                <div class="metric-value">${Math.round(result.achievement.predicted)}<span class="metric-unit">%</span></div>
                             </div>
                             <div class="metric-card">
-                                <div class="metric-label">{{ translations.target }}</div>
-                                <div class="metric-value">${result.achievement.target} ${result.unit}</div>
+                                <div class="metric-label">Target</div>
+                                <div class="metric-value">${result.achievement.target}<span class="metric-unit">${result.unit}</span></div>
                             </div>
                             <div class="metric-card">
-                                <div class="metric-label">{{ translations.model_accuracy }}</div>
-                                <div class="metric-value">${result.forecast.r2 ? (result.forecast.r2 * 100).toFixed(1) + '%' : 'N/A'}</div>
+                                <div class="metric-label">Model Accuracy (R²)</div>
+                                <div class="metric-value">${result.forecast.r2 ? (result.forecast.r2 * 100).toFixed(1) : 'N/A'}<span class="metric-unit">%</span></div>
                             </div>
                         </div>
                     </div>
@@ -572,31 +952,31 @@
                     labels: allYears,
                     datasets: [
                         {
-                            label: '{{ translations.historical_data }}',
+                            label: 'Historical Data',
                             data: historicalValues,
-                            borderColor: '#667eea',
-                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                            borderWidth: 3,
-                            pointRadius: 4,
-                            pointBackgroundColor: '#667eea',
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#2563eb',
                             tension: 0.1
                         },
                         {
-                            label: '{{ translations.forecast }}',
+                            label: 'AI Forecast',
                             data: forecastValues,
-                            borderColor: '#764ba2',
-                            backgroundColor: 'rgba(118, 75, 162, 0.1)',
-                            borderWidth: 3,
+                            borderColor: '#dc2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.05)',
+                            borderWidth: 2,
                             borderDash: [5, 5],
-                            pointRadius: 4,
-                            pointBackgroundColor: '#764ba2',
+                            pointRadius: 3,
+                            pointBackgroundColor: '#dc2626',
                             tension: 0.1
                         },
                         {
-                            label: '{{ translations.confidence_interval }}',
+                            label: '95% Confidence Interval',
                             data: upperBound,
-                            borderColor: 'rgba(118, 75, 162, 0.3)',
-                            backgroundColor: 'rgba(118, 75, 162, 0.05)',
+                            borderColor: 'rgba(220, 38, 38, 0.2)',
+                            backgroundColor: 'rgba(220, 38, 38, 0.05)',
                             borderWidth: 1,
                             borderDash: [2, 2],
                             pointRadius: 0,
@@ -605,8 +985,8 @@
                         {
                             label: '',
                             data: lowerBound,
-                            borderColor: 'rgba(118, 75, 162, 0.3)',
-                            backgroundColor: 'rgba(118, 75, 162, 0.05)',
+                            borderColor: 'rgba(220, 38, 38, 0.2)',
+                            backgroundColor: 'rgba(220, 38, 38, 0.05)',
                             borderWidth: 1,
                             borderDash: [2, 2],
                             pointRadius: 0,
@@ -624,7 +1004,9 @@
                             labels: {
                                 filter: function(item) {
                                     return item.text !== '';
-                                }
+                                },
+                                usePointStyle: true,
+                                padding: 15
                             }
                         },
                         tooltip: {
@@ -637,7 +1019,7 @@
                                     type: 'line',
                                     yMin: data.achievement.target,
                                     yMax: data.achievement.target,
-                                    borderColor: 'rgba(255, 99, 132, 0.5)',
+                                    borderColor: 'rgba(34, 197, 94, 0.5)',
                                     borderWidth: 2,
                                     borderDash: [10, 5],
                                     label: {
@@ -653,7 +1035,10 @@
                         x: {
                             title: {
                                 display: true,
-                                text: 'Year'
+                                text: 'Year',
+                                font: {
+                                    size: 12
+                                }
                             },
                             grid: {
                                 display: false
@@ -662,7 +1047,10 @@
                         y: {
                             title: {
                                 display: true,
-                                text: data.unit || 'Value'
+                                text: data.unit || 'Value',
+                                font: {
+                                    size: 12
+                                }
                             },
                             grid: {
                                 color: 'rgba(0, 0, 0, 0.05)'
@@ -675,8 +1063,13 @@
             charts.push(chart);
         }
 
+        function clearResults() {
+            document.getElementById('results').innerHTML = '<div class="info-message">Select indicators and click Analyze to begin</div>';
+            charts.forEach(chart => chart.destroy());
+            charts = [];
+        }
+
         function exportResults() {
-            // Implementation for export functionality
             alert('Export functionality will be implemented');
         }
     </script>

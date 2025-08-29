@@ -33,17 +33,18 @@ try:
     import pmdarima as pm
     HAS_ARIMA = True
     logger.info("✅ ARIMA model activated (pmdarima installed)")
-except ImportError:
+except Exception as e:
     HAS_ARIMA = False
-    logger.warning("⚠️ ARIMA model not available (pmdarima not installed)")
+    logger.warning(f"⚠️ ARIMA model not available: {e}")
 
 try:
+    import xgboost
     from xgboost import XGBRegressor
     HAS_XGB = True
     logger.info("✅ XGBoost model activated (xgboost installed)")
-except ImportError:
+except Exception as e:
     HAS_XGB = False
-    logger.warning("⚠️ XGBoost model not available (xgboost not installed)")
+    logger.warning(f"⚠️ XGBoost model not available: {e}")
 
 app = FastAPI(title="Global SDGs Analytics Platform")
 

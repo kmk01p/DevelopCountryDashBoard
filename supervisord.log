@@ -4,3 +4,8 @@
 2025-08-29 09:17:35,697 INFO supervisord started with pid 1224
 2025-08-29 09:17:36,702 INFO spawned: 'sdgs_api' with pid 1227
 2025-08-29 09:17:38,086 INFO success: sdgs_api entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2025-08-29 11:30:53,366 INFO RPC interface 'supervisor' initialized
+2025-08-29 11:30:53,367 CRIT Server 'unix_http_server' running without any HTTP authentication checking
+2025-08-29 11:30:53,368 INFO supervisord started with pid 1224
+2025-08-29 11:30:54,371 INFO spawned: 'sdgs_api' with pid 27757
+2025-08-29 11:30:55,373 INFO success: sdgs_api entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
