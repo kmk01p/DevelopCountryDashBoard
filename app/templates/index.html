@@ -9,53 +9,55 @@
 <body class="section">
   <div class="container">
     <h1 class="title">SDGs AI Dashboard</h1>
-    <p class="subtitle">CSV 업로드로 SDGs 지표를 학습하고 향후 달성도를 예측합니다.</p>
+    <p class="subtitle">공개 데이터와 머신러닝으로 SDGs 지표를 예측합니다.</p>
 
-    <form id="form" class="box">
-      <div class="field">
-        <label class="label">데이터 CSV</label>
-        <div class="control">
-          <input class="input" type="file" id="file" name="file" accept=".csv" required>
-        </div>
-        <p class="help">열 이름에 year, value(또는 선택한 타겟) 포함</p>
-      </div>
-
-      <div class="field is-horizontal">
-        <div class="field-body">
-          <div class="field">
-            <label class="label">예측 기간(년)</label>
-            <div class="control">
-              <input class="input" type="number" id="horizon" name="horizon" value="5" min="1" max="30">
-            </div>
-          </div>
-          <div class="field">
-            <label class="label">타겟 컬럼명</label>
-            <div class="control">
-              <input class="input" type="text" id="target_column" name="target_column" value="value">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="field">
-        <div class="control">
-          <button class="button is-primary" type="submit">예측 실행</button>
-        </div>
-      </div>
-    </form>
-
-    <div id="msg" class="notification is-hidden"></div>
-
-    <div class="box">
-      <canvas id="chart"></canvas>
+    <div class="tabs is-boxed">
+      <ul>
+        <li class="is-active" data-tab="upload"><a>CSV 업로드</a></li>
+        <li data-tab="worldbank"><a>World Bank API</a></li>
+      </ul>
     </div>
 
-    <article class="message is-info">
-      <div class="message-header">
-        <p>예시 CSV 포맷</p>
-      </div>
-      <div class="message-body">
-        <pre>year,value
+    <div id="tab-upload">
+      <form id="form" class="box">
+        <div class="field">
+          <label class="label">데이터 CSV</label>
+          <div class="control">
+            <input class="input" type="file" id="file" name="file" accept=".csv" required>
+          </div>
+          <p class="help">열 이름에 year, value(또는 선택한 타겟) 포함</p>
+        </div>
+
+        <div class="field is-horizontal">
+          <div class="field-body">
+            <div class="field">
+              <label class="label">예측 기간(년)</label>
+              <div class="control">
+                <input class="input" type="number" id="horizon" name="horizon" value="5" min="1" max="30">
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">타겟 컬럼명</label>
+              <div class="control">
+                <input class="input" type="text" id="target_column" name="target_column" value="value">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="control">
+            <button class="button is-primary" type="submit">예측 실행</button>
+          </div>
+        </div>
+      </form>
+
+      <article class="message is-info">
+        <div class="message-header">
+          <p>예시 CSV 포맷</p>
+        </div>
+        <div class="message-body">
+          <pre>year,value
 2010,85.1
 2011,86.3
 2012,87.0
@@ -67,11 +69,56 @@
 2018,93.0
 2019,93.4
 2020,93.7</pre>
+        </div>
+      </article>
+    </div>
+
+    <div id="tab-worldbank" class="is-hidden">
+      <div class="box">
+        <div class="columns is-multiline">
+          <div class="column is-4">
+            <label class="label">국가 코드 (ISO2 또는 ISO3)</label>
+            <input id="wb-country" class="input" type="text" placeholder="KR, USA, IND 등" value="KOR">
+            <p class="help">예: KOR(대한민국), USA(미국), IND(인도)</p>
+          </div>
+          <div class="column is-5">
+            <label class="label">지표 선택</label>
+            <div class="select is-fullwidth">
+              <select id="wb-indicator"></select>
+            </div>
+            <p class="help">World Bank 지표 코드</p>
+          </div>
+          <div class="column is-3">
+            <label class="label">예측 기간(년)</label>
+            <input id="wb-horizon" class="input" type="number" value="5" min="1" max="30">
+          </div>
+        </div>
+        <div class="field">
+          <button id="wb-run" class="button is-primary">API로 예측</button>
+        </div>
+        <div id="wb-meta" class="content is-small"></div>
       </div>
-    </article>
+    </div>
+
+    <div id="msg" class="notification is-hidden"></div>
+
+    <div class="box">
+      <canvas id="chart"></canvas>
+    </div>
   </div>
 
   <script>
+    const tabs = document.querySelectorAll('.tabs li');
+    const tabUpload = document.getElementById('tab-upload');
+    const tabWB = document.getElementById('tab-worldbank');
+    tabs.forEach(li => li.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('is-active'));
+      li.classList.add('is-active');
+      const tab = li.getAttribute('data-tab');
+      if (tab === 'upload') { tabUpload.classList.remove('is-hidden'); tabWB.classList.add('is-hidden'); }
+      else { tabUpload.classList.add('is-hidden'); tabWB.classList.remove('is-hidden'); }
+    }));
+
     const form = document.getElementById('form');
     const msg = document.getElementById('msg');
     const ctx = document.getElementById('chart').getContext('2d');
@@ -82,6 +129,48 @@
       msg.textContent = text;
     }
 
+    function renderChart(histYears, histVals, futYears, futVals, title='SDGs 지표 예측') {
+      const labels = histYears.concat(futYears);
+      const histLen = histYears.length;
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: '과거 추세',
+              data: labels.map((y, i) => i < histLen ? histVals[i] : null),
+              borderColor: 'rgba(54, 162, 235, 1)',
+              backgroundColor: 'rgba(54, 162, 235, 0.2)',
+              spanGaps: true,
+            },
+            {
+              label: '미래 예측',
+              data: labels.map((y, i) => i >= histLen ? futVals[i - histLen] : null),
+              borderColor: 'rgba(255, 99, 132, 1)',
+              backgroundColor: 'rgba(255, 99, 132, 0.2)',
+              borderDash: [5,5],
+              spanGaps: true,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: { title: { display: true, text: 'Year' } },
+            y: { title: { display: true, text: 'Value' }, suggestedMin: 0 }
+          },
+          plugins: {
+            tooltip: { mode: 'index', intersect: false },
+            title: { display: true, text: title },
+            legend: { position: 'bottom' }
+          }
+        }
+      });
+    }
+
+    // CSV Upload flow
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       showMessage('예측을 수행 중입니다...', 'is-info');
@@ -92,66 +181,69 @@
         showMessage('CSV 파일을 선택해주세요.', 'is-danger');
         return;
       }
-
       try {
-        const res = await fetch('/predict', {
-          method: 'POST',
-          body: data
-        });
+        const res = await fetch('/predict', { method: 'POST', body: data });
         const json = await res.json();
-        if (json.error) {
-          showMessage(json.error, 'is-danger');
-          return;
-        }
+        if (json.error) { showMessage(json.error, 'is-danger'); return; }
         msg.className = 'notification is-hidden';
-
         const histYears = json.historical.year;
         const histVals = json.historical[document.getElementById('target_column').value];
         const futYears = json.forecast.year;
         const futVals = json.forecast.pred;
-
-        const labels = histYears.concat(futYears);
-        const histLen = histYears.length;
-
-        if (chart) chart.destroy();
-        chart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [
-              {
-                label: '과거 추세',
-                data: labels.map((y, i) => i < histLen ? histVals[i] : null),
-                borderColor: 'rgba(54, 162, 235, 1)',
-                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                spanGaps: true,
-              },
-              {
-                label: '미래 예측',
-                data: labels.map((y, i) => i >= histLen ? futVals[i - histLen] : null),
-                borderColor: 'rgba(255, 99, 132, 1)',
-                backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                borderDash: [5,5],
-                spanGaps: true,
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              x: { title: { display: true, text: 'Year' } },
-              y: { title: { display: true, text: 'Value' }, suggestedMin: 0 }
-            },
-            plugins: {
-              tooltip: { mode: 'index', intersect: false },
-              title: { display: true, text: 'SDGs 지표 예측' },
-              legend: { position: 'bottom' }
-            }
-          }
-        });
+        const title = `SDGs 지표 예측 (R2: ${json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3)})`;
+        renderChart(histYears, histVals, futYears, futVals, title);
       } catch (err) {
         console.error(err);
         showMessage('예측 중 오류가 발생했습니다.', 'is-danger');
+      }
+    });
+
+    // World Bank API flow
+    async function loadIndicators() {
+      try {
+        const res = await fetch('/api/indicators');
+        const json = await res.json();
+        const sel = document.getElementById('wb-indicator');
+        sel.innerHTML = '';
+        json.indicators.forEach(item => {
+          const opt = document.createElement('option');
+          opt.value = item.code;
+          opt.textContent = `${item.code} - ${item.name} (${item.sdg})`;
+          sel.appendChild(opt);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    loadIndicators();
+
+    document.getElementById('wb-run').addEventListener('click', async () => {
+      const c = document.getElementById('wb-country').value.trim();
+      const ind = document.getElementById('wb-indicator').value;
+      const hz = parseInt(document.getElementById('wb-horizon').value, 10) || 5;
+      if (!c || !ind) { showMessage('국가와 지표를 선택해주세요.', 'is-danger'); return; }
+      showMessage('World Bank 데이터로 예측 중...', 'is-info');
+      try {
+        const url = `/predict_wb?country=${encodeURIComponent(c)}&indicator=${encodeURIComponent(ind)}&horizon=${hz}`;
+        const res = await fetch(url);
+        const json = await res.json();
+        if (json.error) { showMessage(json.error, 'is-danger'); return; }
+        msg.className = 'notification is-hidden';
+        const histYears = json.historical.year;
+        const histVals = json.historical.value;
+        const futYears = json.forecast.year;
+        const futVals = json.forecast.pred;
+        const metaDiv = document.getElementById('wb-meta');
+        const r2 = json.metrics.r2 === null ? 'N/A' : json.metrics.r2.toFixed(3);
+        metaDiv.innerHTML = `
+          <p><strong>국가:</strong> ${json.meta.country} &nbsp; <strong>지표:</strong> ${json.meta.indicator} - ${json.meta.indicator_name || ''} &nbsp; <strong>연관 SDG:</strong> ${json.meta.sdg || ''}</p>
+          <p><strong>검증 R2:</strong> ${r2}</p>
+        `;
+        const title = `${json.meta.indicator_name || json.meta.indicator} (${json.meta.sdg || ''}) - 예측 (R2: ${r2})`;
+        renderChart(histYears, histVals, futYears, futVals, title);
+      } catch (e) {
+        console.error(e);
+        showMessage('API 예측 중 오류가 발생했습니다.', 'is-danger');
       }
     });
   </script>
