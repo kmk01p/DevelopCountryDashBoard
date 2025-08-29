@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SDGs AI Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="section">
+  <div class="container">
+    <h1 class="title">SDGs AI Dashboard</h1>
+    <p class="subtitle">CSV 업로드로 SDGs 지표를 학습하고 향후 달성도를 예측합니다.</p>
+
+    <form id="form" class="box">
+      <div class="field">
+        <label class="label">데이터 CSV</label>
+        <div class="control">
+          <input class="input" type="file" id="file" name="file" accept=".csv" required>
+        </div>
+        <p class="help">열 이름에 year, value(또는 선택한 타겟) 포함</p>
+      </div>
+
+      <div class="field is-horizontal">
+        <div class="field-body">
+          <div class="field">
+            <label class="label">예측 기간(년)</label>
+            <div class="control">
+              <input class="input" type="number" id="horizon" name="horizon" value="5" min="1" max="30">
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">타겟 컬럼명</label>
+            <div class="control">
+              <input class="input" type="text" id="target_column" name="target_column" value="value">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="control">
+          <button class="button is-primary" type="submit">예측 실행</button>
+        </div>
+      </div>
+    </form>
+
+    <div id="msg" class="notification is-hidden"></div>
+
+    <div class="box">
+      <canvas id="chart"></canvas>
+    </div>
+
+    <article class="message is-info">
+      <div class="message-header">
+        <p>예시 CSV 포맷</p>
+      </div>
+      <div class="message-body">
+        <pre>year,value
+2010,85.1
+2011,86.3
+2012,87.0
+2013,88.9
+2014,90.1
+2015,91.4
+2016,92.0
+2017,92.5
+2018,93.0
+2019,93.4
+2020,93.7</pre>
+      </div>
+    </article>
+  </div>
+
+  <script>
+    const form = document.getElementById('form');
+    const msg = document.getElementById('msg');
+    const ctx = document.getElementById('chart').getContext('2d');
+    let chart;
+
+    function showMessage(text, type='is-info') {
+      msg.className = `notification ${type}`;
+      msg.textContent = text;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showMessage('예측을 수행 중입니다...', 'is-info');
+
+      const data = new FormData(form);
+      const fileInput = document.getElementById('file');
+      if (!fileInput.files[0]) {
+        showMessage('CSV 파일을 선택해주세요.', 'is-danger');
+        return;
+      }
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          body: data
+        });
+        const json = await res.json();
+        if (json.error) {
+          showMessage(json.error, 'is-danger');
+          return;
+        }
+        msg.className = 'notification is-hidden';
+
+        const histYears = json.historical.year;
+        const histVals = json.historical[document.getElementById('target_column').value];
+        const futYears = json.forecast.year;
+        const futVals = json.forecast.pred;
+
+        const labels = histYears.concat(futYears);
+        const histLen = histYears.length;
+
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: '과거 추세',
+                data: labels.map((y, i) => i < histLen ? histVals[i] : null),
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                spanGaps: true,
+              },
+              {
+                label: '미래 예측',
+                data: labels.map((y, i) => i >= histLen ? futVals[i - histLen] : null),
+                borderColor: 'rgba(255, 99, 132, 1)',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                borderDash: [5,5],
+                spanGaps: true,
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              x: { title: { display: true, text: 'Year' } },
+              y: { title: { display: true, text: 'Value' }, suggestedMin: 0 }
+            },
+            plugins: {
+              tooltip: { mode: 'index', intersect: false },
+              title: { display: true, text: 'SDGs 지표 예측' },
+              legend: { position: 'bottom' }
+            }
+          }
+        });
+      } catch (err) {
+        console.error(err);
+        showMessage('예측 중 오류가 발생했습니다.', 'is-danger');
+      }
+    });
+  </script>
+</body>
+</html>
