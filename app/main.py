@@ -190,13 +190,18 @@ def _train_and_forecast(df: pd.DataFrame, horizon: int, target_column: str = "va
 
     num_df = _prepare_features(df, target_column)
     # If only 1 feature (target), add year as feature to allow trend
-    features = [c for c in num_df.columns if c != target_column]
+    features = [c for c in num_df.columns if c not in (target_column, "year")]
     if features == []:
-        num_df = pd.concat([num_df, df[["year"]]], axis=1)
+        # ensure year exists as a feature
+        if "year" not in num_df.columns:
+            num_df = pd.concat([num_df, df[["year"]]], axis=1)
         features = ["year"]
-    # Build train/test split with time order
-    full = num_df[["year"] + features + [target_column]].drop_duplicates("year")
-    full = full.sort_values("year")
+    # Build train/test split with time order (avoid duplicate year column)
+    cols = ["year"] + features + [target_column]
+    # remove duplicates while preserving order
+    seen = set()
+    cols = [x for x in cols if not (x in seen or seen.add(x))]
+    full = num_df[cols].drop_duplicates("year").sort_values("year")
     if len(full) < 3:
         return {"error": "Insufficient unique yearly data."}
 
