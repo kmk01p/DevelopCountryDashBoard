@@ -1,0 +1,6 @@
+2025-08-29 09:17:35,691 INFO RPC interface 'supervisor' initialized
+2025-08-29 09:17:35,691 CRIT Server 'unix_http_server' running without any HTTP authentication checking
+2025-08-29 09:17:35,696 INFO daemonizing the supervisord process
+2025-08-29 09:17:35,697 INFO supervisord started with pid 1224
+2025-08-29 09:17:36,702 INFO spawned: 'sdgs_api' with pid 1227
+2025-08-29 09:17:38,086 INFO success: sdgs_api entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
