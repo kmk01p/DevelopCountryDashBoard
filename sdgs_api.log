@@ -14,3 +14,6 @@ INFO:     10.12.238.228:54166 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NE
 INFO:     10.12.238.228:54166 - "GET / HTTP/1.1" 200 OK
 INFO:     10.12.238.228:54166 - "GET /api/indicators HTTP/1.1" 200 OK
 INFO:     10.12.238.228:54166 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NENR&horizon=5 HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:43444 - "GET / HTTP/1.1" 500 Internal Server Error
+INFO:     10.12.238.228:48454 - "GET / HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:38458 - "GET / HTTP/1.1" 200 OK

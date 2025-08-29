@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 
 # Import translations
-from translations import TRANSLATIONS, get_translation
+from app.translations import TRANSLATIONS, get_translation
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -452,7 +452,7 @@ def calculate_achievement(current: float, target: float, direction: str, initial
 @app.get("/")
 async def home(request: Request, lang: str = Query(default="en")):
     """Render home page with selected language."""
-    return templates.TemplateResponse("index_enhanced.html", {
+    return templates.TemplateResponse("index.html", {
         "request": request,
         "lang": lang,
         "translations": TRANSLATIONS[lang] if lang in TRANSLATIONS else TRANSLATIONS["en"],
