@@ -1,0 +1,16 @@
+INFO:     10.12.238.228:47170 - "GET /static/examples.zip HTTP/1.1" 200 OK
+INFO:     10.12.238.228:47170 - "GET / HTTP/1.1" 200 OK
+INFO:     10.12.238.228:47170 - "GET /api/indicators HTTP/1.1" 200 OK
+INFO:     10.12.238.228:50854 - "POST /predict HTTP/1.1" 500 Internal Server Error
+INFO:     10.12.238.228:60760 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NENR&horizon=5 HTTP/1.1" 422 Unprocessable Entity
+INFO:     10.12.238.228:60760 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NENR&horizon=5 HTTP/1.1" 422 Unprocessable Entity
+INFO:     10.12.238.228:48986 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NENR&horizon=5 HTTP/1.1" 422 Unprocessable Entity
+INFO:     10.12.238.228:48986 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NENR&horizon=5 HTTP/1.1" 422 Unprocessable Entity
+INFO:     10.12.238.228:49366 - "GET / HTTP/1.1" 200 OK
+INFO:     10.12.238.228:49366 - "GET /api/indicators HTTP/1.1" 200 OK
+INFO:     10.12.238.228:49366 - "GET /static/examples.zip HTTP/1.1" 200 OK
+INFO:     10.12.238.228:49366 - "POST /predict HTTP/1.1" 500 Internal Server Error
+INFO:     10.12.238.228:54166 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NENR&horizon=5 HTTP/1.1" 422 Unprocessable Entity
+INFO:     10.12.238.228:54166 - "GET / HTTP/1.1" 200 OK
+INFO:     10.12.238.228:54166 - "GET /api/indicators HTTP/1.1" 200 OK
+INFO:     10.12.238.228:54166 - "GET /predict_wb?country=KOR&indicator=SE.PRM.NENR&horizon=5 HTTP/1.1" 422 Unprocessable Entity

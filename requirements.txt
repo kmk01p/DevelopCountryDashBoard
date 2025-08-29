@@ -1,7 +1,22 @@
 fastapi
-uvicorn
+uvicorn[standard]
 requests
 pandas
+numpy
 scikit-learn
 jinja2
 python-multipart
+aiofiles
+
+# Optional AI models (auto-enabled if installed)
+# Uncomment to enable advanced forecasting models
+pmdarima  # For ARIMA time series forecasting
+xgboost   # For XGBoost machine learning
+
+# Data processing and caching
+pyarrow   # For efficient parquet file storage
+openpyxl  # For Excel export support
+
+# Additional utilities
+python-dateutil
+httpx
