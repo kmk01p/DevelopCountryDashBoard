@@ -16,7 +16,8 @@ Access the platform at: **https://8000-ijjy48l5ylcyao79gh8xa.e2b.dev**
 ### Main Dashboard - Professional Interface
 The platform features a clean, professional design suitable for government and public institutions:
 
-![Main Dashboard](screenshots/main-dashboard.png)
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e13d4111-7b5e-41a8-97c0-2a3d7a867dbd" />
+
 *Main dashboard with language selector and professional navy-blue theme*
 
 #### Key UI Elements:
@@ -26,7 +27,9 @@ The platform features a clean, professional design suitable for government and p
 
 ### 📊 Data Analysis Interface
 
-![Analysis Controls](screenshots/analysis-controls.png)
+
+<img width="1122" height="398" alt="image" src="https://github.com/user-attachments/assets/3773bdac-c9a5-4a2b-8bea-57c5336e2cd3" />
+
 *Control panel with country selection, multi-indicator selection, and AI model options*
 
 #### Features Shown:
@@ -38,7 +41,7 @@ The platform features a clean, professional design suitable for government and p
 
 ### 📈 Visualization & Results
 
-![Chart Visualization](screenshots/chart-results.png)
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/177d0513-715c-45a0-ac97-628420454550" />
 *Interactive charts showing historical data, AI predictions, and confidence intervals*
 
 #### Chart Features:
